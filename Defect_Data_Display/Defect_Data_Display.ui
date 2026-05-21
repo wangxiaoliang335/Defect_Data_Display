@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<UI version="4.0">
+ <class>Defect_Data_DisplayClass</class>
+ <widget class="QMainWindow" name="Defect_Data_DisplayClass">
+  <property name="objectName">
+   <string notr="true">Defect_Data_DisplayClass</string>
+  </property>
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1400</width>
+    <height>900</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>LCD缺陷检测系统</string>
+  </property>
+  <property name="styleSheet">
+   <string>
+QMainWindow {
+    background-color: #1a1a2e;
+}
+QLabel {
+    color: #eaeaea;
+    background-color: transparent;
+}
+QWidget#headerWidget {
+    background-color: #16213e;
+    border-bottom: 2px solid #0f3460;
+}
+QWidget#controlPanel {
+    background-color: #16213e;
+    border-radius: 8px;
+}
+QTabWidget::pane {
+    border: none;
+    background-color: #16213e;
+    border-radius: 8px;
+}
+QTabBar::tab {
+    background-color: #0f3460;
+    color: #888;
+    padding: 10px 30px;
+    margin-right: 5px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+QTabBar::tab:selected {
+    background-color: #16213e;
+    color: #00d9ff;
+}
+QTabBar::tab:hover {
+    background-color: #1a4d7c;
+}
+QComboBox {
+    background-color: #0f3460;
+    color: #eaeaea;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 6px 12px;
+    min-width: 100px;
+}
+QComboBox:hover {
+    background-color: #1a4d7c;
+}
+QComboBox::drop-down {
+    border: none;
+}
+QComboBox::down-arrow {
+    image: none;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 5px solid #eaeaea;
+    margin-right: 10px;
+}
+QPushButton {
+    background-color: #0f3460;
+    color: #eaeaea;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 20px;
+    font-weight: bold;
+}
+QPushButton:hover {
+    background-color: #1a4d7c;
+}
+QPushButton:pressed {
+    background-color: #0a2540;
+}
+QPushButton#btnRefresh {
+    background-color: #e94560;
+}
+QPushButton#btnRefresh:hover {
+    background-color: #ff6b6b;
+}
+QPushButton#btnMinimize {
+    background-color: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 8px;
+    min-width: 30px;
+}
+QPushButton#btnMinimize:hover {
+    background-color: #0f3460;
+}
+QPushButton#btnClose {
+    background-color: #e94560;
+}
+QPushButton#btnClose:hover {
+    background-color: #ff6b6b;
+}
+QLabel#sectionTitle {
+    color: #00d9ff;
+    font-size: 16px;
+    font-weight: bold;
+    background-color: transparent;
+    padding: 5px 0px;
+}
+QWidget#centralWidget {
+    background-color: #1a1a2e;
+}
+</string>
+  </property>
+  <widget class="QWidget" name="centralWidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QWidget" name="headerWidget" native="true">
+      <layout class="QHBoxLayout" name="headerLayout">
+       <item>
+        <widget class="QLabel" name="logoLabel">
+         <property name="text">
+          <string>IVS LCD 缺陷检测系统</string>
+         </property>
+         <property name="styleSheet">
+          <string>color: #00d9ff; font-size: 22px; font-weight: bold;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="headerSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>500</width>
+           <height>16777215</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="dateTimeLabel">
+         <property name="text">
+          <string>2026-05-21 19:48:00</string>
+         </property>
+         <property name="styleSheet">
+          <string>color: #00d9ff; font-size: 16px;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="btnSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>20</width>
+           <height>16777215</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnMinimize">
+         <property name="text">
+          <string>_</string>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>36</width>
+           <height>30</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string>font-size: 18px; font-weight: bold;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnClose">
+         <property name="text">
+          <string>X</string>
+         </property>
+         <property name="minimumSize">
+          <size>
+           <width>36</width>
+           <height>30</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string>font-size: 16px; font-weight: bold;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="controlPanel" native="true">
+      <layout class="QHBoxLayout" name="controlLayout">
+       <item>
+        <widget class="QLabel" name="labelTitle">
+         <property name="text">
+          <string>时间范围:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="comboTimeRange">
+         <item>
+          <property name="text">
+           <string>按小时</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>按天</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>按月</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnRefresh">
+         <property name="text">
+          <string>刷新数据</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="controlSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelStatus">
+         <property name="text">
+          <string>状态: 就绪</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="statsLayout">
+      <item>
+       <widget class="QFrame" name="cardFrame_1" native="true">
+        <property name="minimumSize">
+         <size>
+          <width>150</width>
+          <height>80</height>
+         </size>
+        </property>
+        <layout class="QVBoxLayout" name="cardLayout1">
+         <item>
+          <widget class="QLabel" name="statValue1">
+           <property name="text">
+            <string>0</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #00d9ff; font-size: 32px; font-weight: bold;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="statLabel1">
+           <property name="text">
+            <string>总检测数</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #888; font-size: 12px;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="cardFrame_2" native="true">
+        <property name="minimumSize">
+         <size>
+          <width>150</width>
+          <height>80</height>
+         </size>
+        </property>
+        <layout class="QVBoxLayout" name="cardLayout2">
+         <item>
+          <widget class="QLabel" name="statValue2">
+           <property name="text">
+            <string>0</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #00ff88; font-size: 32px; font-weight: bold;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="statLabel2">
+           <property name="text">
+            <string>通过数</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #888; font-size: 12px;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="cardFrame_3" native="true">
+        <property name="minimumSize">
+         <size>
+          <width>150</width>
+          <height>80</height>
+         </size>
+        </property>
+        <layout class="QVBoxLayout" name="cardLayout3">
+         <item>
+          <widget class="QLabel" name="statValue3">
+           <property name="text">
+            <string>0</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #ff4444; font-size: 32px; font-weight: bold;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="statLabel3">
+           <property name="text">
+            <string>失败数</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #888; font-size: 12px;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="cardFrame_4" native="true">
+        <property name="minimumSize">
+         <size>
+          <width>150</width>
+          <height>80</height>
+         </size>
+        </property>
+        <layout class="QVBoxLayout" name="cardLayout4">
+         <item>
+          <widget class="QLabel" name="statValue4">
+           <property name="text">
+            <string>0%</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #00ff88; font-size: 32px; font-weight: bold;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="statLabel4">
+           <property name="text">
+            <string>通过率</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #888; font-size: 12px;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="cardFrame_5" native="true">
+        <property name="minimumSize">
+         <size>
+          <width>150</width>
+          <height>80</height>
+         </size>
+        </property>
+        <layout class="QVBoxLayout" name="cardLayout5">
+         <item>
+          <widget class="QLabel" name="statValue5">
+           <property name="text">
+            <string>0</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #ffaa00; font-size: 32px; font-weight: bold;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="statLabel5">
+           <property name="text">
+            <string>总缺陷数</string>
+           </property>
+           <property name="styleSheet">
+            <string>color: #888; font-size: 12px;</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QTabWidget" name="tabWidget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="tabCharts">
+       <attribute name="title">
+        <string>统计分析</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="tabChartsLayout">
+        <item>
+         <widget class="QLabel" name="sectionTitle1">
+          <property name="text">
+           <string>各工位检测统计</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartPlatform" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>180</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="sectionTitle2">
+          <property name="text">
+           <string>AOI 缺陷分析</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartAoiDefect" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>200</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="sectionTitle3">
+          <property name="text">
+           <string>检测结果统计</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartInspectionResult" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>200</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabMapping">
+       <attribute name="title">
+        <string>缺陷位置映射</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="tabMappingLayout">
+        <item>
+         <widget class="QLabel" name="sectionTitle4">
+          <property name="text">
+           <string>缺陷位置分布图</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartDefectMapping" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>500</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menuBar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1400</width>
+     <height>0</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QToolBar" name="mainToolBar">
+   <property name="windowTitle">
+    <string>mainToolBar</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+  </widget>
+  <widget class="QStatusBar" name="statusBar"/>
+ </widget>
+ <layoutDefault spacing="6"/>
+ <pixmapfunction></pixmapfunction>
+ <resources>
+  <include location="Defect_Data_Display.qrc"/>
+ </resources>
+ <connections/>
+</UI>

@@ -1,0 +1,39 @@
+# Build directories
+x64/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+
+# Qt generated files
+*.obj
+*.moc
+*.rcc
+*.qmlc
+*.jsc
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+
+# Visual Studio
+.vs/
+*.vcxproj.filters
+*.vcxproj.user
+*.vcxproj
+*.sln
+*.suo
+*.user
+*.userosscache
+*.opensdf
+*.sdf
+*.tlog
+*.log
+*.ipch
+
+# MySQL Connector
+*.log
+
+# Temp files
+*.tmp
+*.bak
+*.swp
