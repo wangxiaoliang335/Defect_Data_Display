@@ -15,6 +15,9 @@
 #include <QTimer>
 #include <QMouseEvent>
 #include <QTabWidget>
+#include <QDateEdit>
+#include <QDate>
+#include <QTableWidget>
 #include "ui_Defect_Data_Display.h"
 
 class QChartView;
@@ -39,6 +42,7 @@ private slots:
     void onMinimizeClicked();
     void onCloseClicked();
     void onTabChanged(int index);
+    void onDateChanged(const QDate& date);
 
 private:
     Ui::Defect_Data_DisplayClass ui;
@@ -48,7 +52,10 @@ private:
     void* m_chartViewInspection;
     void* m_chartViewPlatform;
     void* m_chartViewDefectMapping;
+    void* m_chartViewTrend;
+    void* m_chartViewDefectRate;
     QTimer* m_timer;
+    QDate m_selectedDate;
 
     QPoint m_dragPosition;
     bool m_isDragging;
@@ -58,10 +65,14 @@ private:
     void loadInspectionResultData(const QString& timeRange);
     void loadPlatformStats(const QString& timeRange);
     void loadDefectMapping(const QString& timeRange);
+    void loadTrendData(const QString& timeRange);
+    void loadDetailData(const QString& timeRange);
     void updateAoiDefectChart(const QMap<QString, QList<QPair<QString, int>>>& defectByType);
     void updateInspectionResultChart(const QMap<QString, int>& passByPeriod, const QMap<QString, int>& failByPeriod);
     void updatePlatformChart(const QMap<int, QPair<int, int>>& platformStats);
     void updateDefectMappingChart(const QList<QPair<int, int>>& defectPositions, const QStringList& defectTypes);
+    void updateTrendChart(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
+    void updateDetailTable(const QList<QVariantList>& defectDetails);
     void updateStats(int totalInspect, int passCount, int failCount, double passRate, int totalDefects);
     QString getTimeFilterClause(const QString& timeRange);
     QString getDateTimeRange(const QString& timeRange);

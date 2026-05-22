@@ -74,6 +74,39 @@ QComboBox::down-arrow {
     border-top: 5px solid #eaeaea;
     margin-right: 10px;
 }
+QDateEdit {
+    background-color: #0f3460;
+    color: #eaeaea;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 6px 12px;
+}
+QDateEdit:hover {
+    background-color: #1a4d7c;
+}
+QCalendarWidget {
+    background-color: #16213e;
+    border-radius: 8px;
+}
+QCalendarWidget QToolButton {
+    background-color: #0f3460;
+    color: #eaeaea;
+    border: none;
+    border-radius: 4px;
+}
+QCalendarWidget QMenu {
+    background-color: #16213e;
+    color: #eaeaea;
+}
+QCalendarWidget QSpinBox {
+    background-color: #0f3460;
+    color: #eaeaea;
+}
+QCalendarWidget QAbstractItemView {
+    background-color: #16213e;
+    color: #eaeaea;
+    selection-background-color: #0f3460;
+}
 QPushButton {
     background-color: #0f3460;
     color: #eaeaea;
@@ -214,7 +247,28 @@ QWidget#centralWidget {
        <item>
         <widget class="QLabel" name="labelTitle">
          <property name="text">
-          <string>时间范围:</string>
+          <string>选择日期:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QDateEdit" name="dateEdit">
+         <property name="calendarPopup">
+          <bool>true</bool>
+         </property>
+         <property name="date">
+          <date>
+           <year>2026</year>
+           <month>5</month>
+           <day>21</day>
+          </date>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelTitle2">
+         <property name="text">
+          <string>统计方式:</string>
          </property>
         </widget>
        </item>
@@ -460,24 +514,23 @@ QWidget#centralWidget {
       <property name="currentIndex">
        <number>0</number>
       </property>
-      <widget class="QWidget" name="tabCharts">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>0</horstretch>
+        <verstretch>1</verstretch>
+       </sizepolicy>
+      </property>
+      <widget class="QWidget" name="tabPlatform">
        <attribute name="title">
-        <string>统计分析</string>
+        <string>工位统计</string>
        </attribute>
-       <layout class="QVBoxLayout" name="tabChartsLayout">
-        <item>
-         <widget class="QLabel" name="sectionTitle1">
-          <property name="text">
-           <string>各工位检测统计</string>
-          </property>
-         </widget>
-        </item>
+       <layout class="QVBoxLayout" name="tabPlatformLayout">
         <item>
          <widget class="QWidget" name="chartPlatform" native="true">
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>180</height>
+            <height>280</height>
            </size>
           </property>
           <property name="styleSheet">
@@ -485,19 +538,19 @@ QWidget#centralWidget {
           </property>
          </widget>
         </item>
-        <item>
-         <widget class="QLabel" name="sectionTitle2">
-          <property name="text">
-           <string>AOI 缺陷分析</string>
-          </property>
-         </widget>
-        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabDefect">
+       <attribute name="title">
+        <string>缺陷分析</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="tabDefectLayout">
         <item>
          <widget class="QWidget" name="chartAoiDefect" native="true">
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>200</height>
+            <height>400</height>
            </size>
           </property>
           <property name="styleSheet">
@@ -505,19 +558,19 @@ QWidget#centralWidget {
           </property>
          </widget>
         </item>
-        <item>
-         <widget class="QLabel" name="sectionTitle3">
-          <property name="text">
-           <string>检测结果统计</string>
-          </property>
-         </widget>
-        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabInspection">
+       <attribute name="title">
+        <string>检测结果</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="tabInspectionLayout">
         <item>
          <widget class="QWidget" name="chartInspectionResult" native="true">
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>200</height>
+            <height>400</height>
            </size>
           </property>
           <property name="styleSheet">
@@ -533,13 +586,6 @@ QWidget#centralWidget {
        </attribute>
        <layout class="QVBoxLayout" name="tabMappingLayout">
         <item>
-         <widget class="QLabel" name="sectionTitle4">
-          <property name="text">
-           <string>缺陷位置分布图</string>
-          </property>
-         </widget>
-        </item>
-        <item>
          <widget class="QWidget" name="chartDefectMapping" native="true">
           <property name="minimumSize">
            <size>
@@ -550,6 +596,121 @@ QWidget#centralWidget {
           <property name="styleSheet">
            <string>background-color: #16213e; border-radius: 8px;</string>
           </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabTrend">
+       <attribute name="title">
+        <string>趋势分析</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="tabTrendLayout">
+        <item>
+         <widget class="QLabel" name="sectionTitle5">
+          <property name="text">
+           <string>缺陷趋势图</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartTrend" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>300</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="sectionTitle6">
+          <property name="text">
+           <string>缺陷率趋势</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartDefectRate" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>300</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabDetail">
+       <attribute name="title">
+        <string>详细数据</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="tabDetailLayout">
+        <item>
+        <widget class="QTableWidget" name="tableDefects">
+         <property name="minimumSize">
+          <size>
+           <width>0</width>
+           <height>500</height>
+          </size>
+         </property>
+         <property name="styleSheet">
+          <string>
+QTableWidget {
+    background-color: #16213e;
+    color: #eaeaea;
+    gridline-color: #0f3460;
+    border: none;
+    border-radius: 8px;
+}
+QHeaderView::section {
+    background-color: #0f3460;
+    color: #00d9ff;
+    padding: 8px;
+    border: none;
+}
+QTableWidget::item {
+    padding: 5px;
+}
+QTableWidget::item:selected {
+    background-color: #1a4d7c;
+}
+           </string>
+          </property>
+          <column>
+           <property name="text">
+            <string>序号</string>
+           </property>
+           <property name="width">
+            <number>60</number>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>时间</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>缺陷类型</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>X坐标</string>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Y坐标</string>
+           </property>
+          </column>
          </widget>
         </item>
        </layout>
