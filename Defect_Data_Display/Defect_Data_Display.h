@@ -20,6 +20,7 @@
 #include <QTableWidget>
 #include <QThread>
 #include <QMutex>
+#include <QChartView>
 #include "ui_Defect_Data_Display.h"
 
 class DataLoaderThread;
@@ -68,16 +69,25 @@ private slots:
     void onDataLoaded_Detail(const QList<QVariantList>& defectDetails);
     void onLoadFinished(int loadId);
 
+    // New slots for time-based trend data
+    void onDataLoaded_PlatformTrend(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData, const QString& timeRange);
+    void onDataLoaded_DefectTrend(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange);
+    void onDataLoaded_InspectionTrend(const QMap<QString, QPair<int, int>>& inspectionTrendData, const QString& timeRange);
+
 private:
     Ui::Defect_Data_DisplayClass ui;
     QSqlDatabase m_db;
 
     void* m_chartViewAoi;
-    void* m_chartViewInspection;
-    void* m_chartViewPlatform;
+    void* m_chartViewInspectionPass;
+    void* m_chartViewInspectionFail;
     void* m_chartViewDefectMapping;
     void* m_chartViewTrend;
     void* m_chartViewDefectRate;
+    QChartView* m_chartViewPlatform0;
+    QChartView* m_chartViewPlatform1;
+    QChartView* m_chartViewPlatform2;
+    QChartView* m_chartViewPlatform3;
     QTimer* m_timer;
     QDate m_selectedDate;
 
@@ -96,6 +106,12 @@ private:
     CachedTabData m_detailCache;
     qint64 m_lastMainLoadTime;
 
+    // New member variables for time-based trend data
+    QMap<QString, QMap<int, QPair<int, int>>> m_platformTrendData;  // time_period -> platform_id -> (pass, fail)
+    QMap<QString, QMap<QString, int>> m_defectTrendData;            // time_period -> (defect_type -> count)
+    QMap<QString, QPair<int, int>> m_inspectionTrendData;            // time_period -> (pass, fail)
+    QString m_currentTimeFormat;  // Current time format for display
+
     bool connectToDatabase();
     void startLoading(const QString& timeRange);
     void loadAoiDefectData(const QString& timeRange);
@@ -110,7 +126,6 @@ private:
     bool isCacheValid(CachedTabData* cache, const QString& timeRange, const QDate& date);
     void updateAoiDefectChart(const QMap<QString, QList<QPair<QString, int>>>& defectByType);
     void updateInspectionResultChart(const QMap<QString, int>& passByPeriod, const QMap<QString, int>& failByPeriod);
-    void updatePlatformChart(const QMap<int, QPair<int, int>>& platformStats);
     void updateDefectMappingChart(const QList<QPair<int, int>>& defectPositions, const QStringList& defectTypes);
     void updateTrendChart(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
     void updateDetailTable(const QList<QVariantList>& defectDetails);
@@ -118,6 +133,12 @@ private:
     QString getTimeFilterClause(const QString& timeRange);
     QString getDateTimeRange(const QString& timeRange);
     void setupCharts();
+
+    // New functions for time-based trend display
+    void updatePlatformTrendChart(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData);
+    void updateDefectTrendChart(const QMap<QString, QMap<QString, int>>& defectTrendData);
+    void updateInspectionTrendChart(const QMap<QString, QPair<int, int>>& inspectionTrendData);
+    void loadMainData(const QString& timeRange);
 };
 
 class DataLoaderThread : public QThread
@@ -138,6 +159,11 @@ signals:
     void trendDataLoaded(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
     void detailDataLoaded(const QList<QVariantList>& defectDetails);
     void finished(int loadId);
+
+    // New signals for time-based trend data
+    void platformTrendLoaded(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData, const QString& timeRange);
+    void defectTrendLoaded(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange);
+    void inspectionTrendLoaded(const QMap<QString, QPair<int, int>>& inspectionTrendData, const QString& timeRange);
 
 protected:
     int m_loadId;

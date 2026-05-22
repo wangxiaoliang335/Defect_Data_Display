@@ -525,12 +525,54 @@ QWidget#centralWidget {
         <string>工位统计</string>
        </attribute>
        <layout class="QVBoxLayout" name="tabPlatformLayout">
+        <property name="spacing">
+         <number>2</number>
+        </property>
         <item>
-         <widget class="QWidget" name="chartPlatform" native="true">
+         <widget class="QWidget" name="chartPlatform0" native="true">
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>280</height>
+            <height>170</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartPlatform1" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>170</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartPlatform2" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>170</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartPlatform3" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>170</height>
            </size>
           </property>
           <property name="styleSheet">
@@ -565,12 +607,28 @@ QWidget#centralWidget {
         <string>检测结果</string>
        </attribute>
        <layout class="QVBoxLayout" name="tabInspectionLayout">
+        <property name="spacing">
+         <number>2</number>
+        </property>
         <item>
-         <widget class="QWidget" name="chartInspectionResult" native="true">
+         <widget class="QWidget" name="chartInspectionPass" native="true">
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>400</height>
+            <height>250</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartInspectionFail" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>250</height>
            </size>
           </property>
           <property name="styleSheet">

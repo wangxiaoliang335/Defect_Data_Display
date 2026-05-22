@@ -12,12 +12,17 @@
 #include <QTimer>
 #include <QMouseEvent>
 #include <QApplication>
+#include <QFont>
 
 Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     : QMainWindow(parent)
     , m_chartViewAoi(nullptr)
-    , m_chartViewInspection(nullptr)
-    , m_chartViewPlatform(nullptr)
+    , m_chartViewInspectionPass(nullptr)
+    , m_chartViewInspectionFail(nullptr)
+    , m_chartViewPlatform0(nullptr)
+    , m_chartViewPlatform1(nullptr)
+    , m_chartViewPlatform2(nullptr)
+    , m_chartViewPlatform3(nullptr)
     , m_chartViewDefectMapping(nullptr)
     , m_chartViewTrend(nullptr)
     , m_chartViewDefectRate(nullptr)
@@ -184,21 +189,94 @@ void Defect_Data_Display::updateDateTime()
 
 void Defect_Data_Display::setupCharts()
 {
-    QChart* chartPlatform = new QChart();
-    chartPlatform->setTitle("Platform Stats");
-    chartPlatform->setAnimationOptions(QChart::NoAnimation);
-    chartPlatform->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
-    chartPlatform->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    chartPlatform->legend()->setLabelColor(QColor(234, 234, 234));
+    // Create 4 separate charts for each platform
+    QStringList platformNames = {"P0", "P1", "P2", "P3"};
+    QList<QColor> platformColors = {
+        QColor(0, 255, 136),    // P0 - Green
+        QColor(255, 200, 0),    // P1 - Yellow
+        QColor(0, 150, 255),    // P2 - Blue
+        QColor(255, 100, 100)   // P3 - Red
+    };
 
-    m_chartViewPlatform = new QChartView(chartPlatform);
-    ((QChartView*)m_chartViewPlatform)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewPlatform)->setMinimumHeight(280);
-    ((QChartView*)m_chartViewPlatform)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    // Create P0 chart
+    QChart* chart0 = new QChart();
+    chart0->setTitle(platformNames[0] + " Trend");
+    chart0->setAnimationOptions(QChart::NoAnimation);
+    chart0->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart0->setTitleBrush(QBrush(platformColors[0]));
+    chart0->legend()->setLabelColor(QColor(234, 234, 234));
+    chart0->legend()->setAlignment(Qt::AlignTop);
+    chart0->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart0->setMargins(QMargins(0, 0, 0, 0));
+    m_chartViewPlatform0 = new QChartView(chart0);
+    ((QChartView*)m_chartViewPlatform0)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewPlatform0)->setMinimumHeight(170);
+    ((QChartView*)m_chartViewPlatform0)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    ((QChartView*)m_chartViewPlatform0)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QVBoxLayout* layout0 = new QVBoxLayout(ui.chartPlatform0);
+    layout0->setSpacing(0);
+    layout0->setContentsMargins(0, 0, 0, 0);
+    layout0->addWidget((QChartView*)m_chartViewPlatform0);
 
-    QVBoxLayout* layoutPlatform = new QVBoxLayout(ui.chartPlatform);
-    layoutPlatform->setContentsMargins(0, 0, 0, 0);
-    layoutPlatform->addWidget((QChartView*)m_chartViewPlatform);
+    // Create P1 chart
+    QChart* chart1 = new QChart();
+    chart1->setTitle(platformNames[1] + " Trend");
+    chart1->setAnimationOptions(QChart::NoAnimation);
+    chart1->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart1->setTitleBrush(QBrush(platformColors[1]));
+    chart1->legend()->setLabelColor(QColor(234, 234, 234));
+    chart1->legend()->setAlignment(Qt::AlignTop);
+    chart1->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart1->setMargins(QMargins(0, 0, 0, 0));
+    m_chartViewPlatform1 = new QChartView(chart1);
+    ((QChartView*)m_chartViewPlatform1)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewPlatform1)->setMinimumHeight(170);
+    ((QChartView*)m_chartViewPlatform1)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    ((QChartView*)m_chartViewPlatform1)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QVBoxLayout* layout1 = new QVBoxLayout(ui.chartPlatform1);
+    layout1->setSpacing(0);
+    layout1->setContentsMargins(0, 0, 0, 0);
+    layout1->addWidget((QChartView*)m_chartViewPlatform1);
+
+    // Create P2 chart
+    QChart* chart2 = new QChart();
+    chart2->setTitle(platformNames[2] + " Trend");
+    chart2->setAnimationOptions(QChart::NoAnimation);
+    chart2->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart2->setTitleBrush(QBrush(platformColors[2]));
+    chart2->legend()->setLabelColor(QColor(234, 234, 234));
+    chart2->legend()->setAlignment(Qt::AlignTop);
+    chart2->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart2->setMargins(QMargins(0, 0, 0, 0));
+    m_chartViewPlatform2 = new QChartView(chart2);
+    ((QChartView*)m_chartViewPlatform2)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewPlatform2)->setMinimumHeight(170);
+    ((QChartView*)m_chartViewPlatform2)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    ((QChartView*)m_chartViewPlatform2)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QVBoxLayout* layout2 = new QVBoxLayout(ui.chartPlatform2);
+    layout2->setSpacing(0);
+    layout2->setContentsMargins(0, 0, 0, 0);
+    layout2->addWidget((QChartView*)m_chartViewPlatform2);
+
+    // Create P3 chart
+    QChart* chart3 = new QChart();
+    chart3->setTitle(platformNames[3] + " Trend");
+    chart3->setAnimationOptions(QChart::NoAnimation);
+    chart3->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart3->setTitleBrush(QBrush(platformColors[3]));
+    chart3->legend()->setLabelColor(QColor(234, 234, 234));
+    chart3->legend()->setAlignment(Qt::AlignTop);
+    chart3->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart3->setMargins(QMargins(0, 0, 0, 0));
+    m_chartViewPlatform3 = new QChartView(chart3);
+    ((QChartView*)m_chartViewPlatform3)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewPlatform3)->setMinimumHeight(170);
+    ((QChartView*)m_chartViewPlatform3)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    ((QChartView*)m_chartViewPlatform3)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QVBoxLayout* layout3 = new QVBoxLayout(ui.chartPlatform3);
+    layout3->setSpacing(0);
+    layout3->setContentsMargins(0, 0, 0, 0);
+    layout3->addWidget((QChartView*)m_chartViewPlatform3);
 
     QChart* chartAoi = new QChart();
     chartAoi->setTitle("AOI Defect Analysis");
@@ -216,21 +294,41 @@ void Defect_Data_Display::setupCharts()
     layoutAoi->setContentsMargins(0, 0, 0, 0);
     layoutAoi->addWidget((QChartView*)m_chartViewAoi);
 
-    QChart* chartInspection = new QChart();
-    chartInspection->setTitle("Inspection Results");
-    chartInspection->setAnimationOptions(QChart::NoAnimation);
-    chartInspection->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
-    chartInspection->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    chartInspection->legend()->setLabelColor(QColor(234, 234, 234));
+    // Create Inspection Pass chart
+    QChart* chartPass = new QChart();
+    chartPass->setTitle("Pass Count Trend");
+    chartPass->setAnimationOptions(QChart::NoAnimation);
+    chartPass->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartPass->setTitleBrush(QBrush(QColor(0, 255, 136)));
+    chartPass->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartPass->setMargins(QMargins(0, 0, 0, 0));
+    m_chartViewInspectionPass = new QChartView(chartPass);
+    ((QChartView*)m_chartViewInspectionPass)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewInspectionPass)->setMinimumHeight(250);
+    ((QChartView*)m_chartViewInspectionPass)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    ((QChartView*)m_chartViewInspectionPass)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QVBoxLayout* layoutPass = new QVBoxLayout(ui.chartInspectionPass);
+    layoutPass->setSpacing(0);
+    layoutPass->setContentsMargins(0, 0, 0, 0);
+    layoutPass->addWidget((QChartView*)m_chartViewInspectionPass);
 
-    m_chartViewInspection = new QChartView(chartInspection);
-    ((QChartView*)m_chartViewInspection)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewInspection)->setMinimumHeight(280);
-    ((QChartView*)m_chartViewInspection)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
-
-    QVBoxLayout* layoutInspection = new QVBoxLayout(ui.chartInspectionResult);
-    layoutInspection->setContentsMargins(0, 0, 0, 0);
-    layoutInspection->addWidget((QChartView*)m_chartViewInspection);
+    // Create Inspection Fail chart
+    QChart* chartFail = new QChart();
+    chartFail->setTitle("Fail Count Trend");
+    chartFail->setAnimationOptions(QChart::NoAnimation);
+    chartFail->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartFail->setTitleBrush(QBrush(QColor(255, 68, 68)));
+    chartFail->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartFail->setMargins(QMargins(0, 0, 0, 0));
+    m_chartViewInspectionFail = new QChartView(chartFail);
+    ((QChartView*)m_chartViewInspectionFail)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewInspectionFail)->setMinimumHeight(250);
+    ((QChartView*)m_chartViewInspectionFail)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    ((QChartView*)m_chartViewInspectionFail)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QVBoxLayout* layoutFail = new QVBoxLayout(ui.chartInspectionFail);
+    layoutFail->setSpacing(0);
+    layoutFail->setContentsMargins(0, 0, 0, 0);
+    layoutFail->addWidget((QChartView*)m_chartViewInspectionFail);
 
     QChart* chartMapping = new QChart();
     chartMapping->setTitle("Defect Position Map");
@@ -346,6 +444,14 @@ void Defect_Data_Display::onRefreshClicked()
     connect(m_workerThread, &DataLoaderThread::finished,
             this, [this](int loadId) { onLoadFinished(loadId); }, Qt::QueuedConnection);
 
+    // Connect new trend data signals
+    connect(m_workerThread, &DataLoaderThread::platformTrendLoaded,
+            this, &Defect_Data_Display::onDataLoaded_PlatformTrend, Qt::QueuedConnection);
+    connect(m_workerThread, &DataLoaderThread::defectTrendLoaded,
+            this, &Defect_Data_Display::onDataLoaded_DefectTrend, Qt::QueuedConnection);
+    connect(m_workerThread, &DataLoaderThread::inspectionTrendLoaded,
+            this, &Defect_Data_Display::onDataLoaded_InspectionTrend, Qt::QueuedConnection);
+
     qDebug() << "Starting worker thread...";
     m_workerThread->start();
     qDebug() << "Worker thread started";
@@ -373,7 +479,7 @@ void Defect_Data_Display::onLoadFinished(int loadId)
 void Defect_Data_Display::onDataLoaded_Aoi(const QMap<QString, QList<QPair<QString, int>>>& defectByType, int totalDefects)
 {
     qDebug() << "=== onDataLoaded_Aoi called ===" << "defect types:" << defectByType.size() << "total:" << totalDefects;
-    updateAoiDefectChart(defectByType);
+    // Only update statistics, not chart (chart updated by trend data)
     ui.statValue5->setText(QString::number(totalDefects));
 }
 
@@ -383,14 +489,15 @@ void Defect_Data_Display::onDataLoaded_Inspection(const QMap<QString, int>& pass
                                                       int failCount, double passRate)
 {
     qDebug() << "=== onDataLoaded_Inspection called ===" << "total:" << totalInspect << "pass:" << passCount << "fail:" << failCount;
-    updateInspectionResultChart(passByPeriod, failByPeriod);
+    // Only update statistics, not chart (chart updated by trend data)
     updateStats(totalInspect, passCount, failCount, passRate, 0);
 }
 
 void Defect_Data_Display::onDataLoaded_Platform(const QMap<int, QPair<int, int>>& platformStats)
 {
     qDebug() << "=== onDataLoaded_Platform called ===" << "platforms:" << platformStats.size();
-    updatePlatformChart(platformStats);
+    // Only store data, don't update chart (chart updated by trend data)
+    Q_UNUSED(platformStats);
 }
 
 void Defect_Data_Display::onDataLoaded_DefectMapping(const QList<QPair<int, int>>& positions, const QStringList& types)
@@ -429,6 +536,36 @@ void Defect_Data_Display::onDataLoaded_Detail(const QList<QVariantList>& defectD
     m_detailCache.timestamp = QDateTime::currentMSecsSinceEpoch();
 
     updateDetailTable(defectDetails);
+}
+
+void Defect_Data_Display::onDataLoaded_PlatformTrend(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData, const QString& timeRange)
+{
+    qDebug() << "=== onDataLoaded_PlatformTrend called ===" << "time periods:" << platformTrendData.size();
+
+    m_platformTrendData = platformTrendData;
+    m_currentTimeFormat = timeRange;
+
+    updatePlatformTrendChart(platformTrendData);
+}
+
+void Defect_Data_Display::onDataLoaded_DefectTrend(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange)
+{
+    qDebug() << "=== onDataLoaded_DefectTrend called ===" << "data points:" << defectTrendData.size();
+
+    m_defectTrendData = defectTrendData;
+    m_currentTimeFormat = timeRange;
+
+    updateDefectTrendChart(defectTrendData);
+}
+
+void Defect_Data_Display::onDataLoaded_InspectionTrend(const QMap<QString, QPair<int, int>>& inspectionTrendData, const QString& timeRange)
+{
+    qDebug() << "=== onDataLoaded_InspectionTrend called ===" << "data points:" << inspectionTrendData.size();
+
+    m_inspectionTrendData = inspectionTrendData;
+    m_currentTimeFormat = timeRange;
+
+    updateInspectionTrendChart(inspectionTrendData);
 }
 
 QString Defect_Data_Display::getTimeFilterClause(const QString& timeRange)
@@ -525,102 +662,6 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
 
     QValueAxis* axisY = new QValueAxis();
     axisY->setTitleText("Defect Count");
-    axisY->setLabelFormat("%d");
-    axisY->setLabelsColor(QColor(234, 234, 234));
-    axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    chart->addAxis(axisY, Qt::AlignLeft);
-
-    series->attachAxis(axisX);
-    series->attachAxis(axisY);
-}
-
-void Defect_Data_Display::updateInspectionResultChart(const QMap<QString, int>& passByPeriod, const QMap<QString, int>& failByPeriod)
-{
-    QChart* chart = ((QChartView*)m_chartViewInspection)->chart();
-    chart->removeAllSeries();
-
-    for (auto axis : chart->axes()) {
-        chart->removeAxis(axis);
-    }
-
-    QBarSet* passSet = new QBarSet("Pass");
-    passSet->setColor(QColor(0, 255, 136));
-    passSet->setLabelColor(QColor(234, 234, 234));
-    QBarSet* failSet = new QBarSet("Fail");
-    failSet->setColor(QColor(255, 68, 68));
-    failSet->setLabelColor(QColor(234, 234, 234));
-
-    for (const QString& period : passByPeriod.keys()) {
-        *passSet << passByPeriod.value(period, 0);
-        *failSet << failByPeriod.value(period, 0);
-    }
-
-    QBarSeries* series = new QBarSeries();
-    series->append(passSet);
-    series->append(failSet);
-
-    chart->addSeries(series);
-    chart->setTitle("Inspection Results");
-
-    QBarCategoryAxis* axisX = new QBarCategoryAxis();
-    axisX->append(QStringList() << "");
-    axisX->setLabelsColor(QColor(234, 234, 234));
-    chart->addAxis(axisX, Qt::AlignBottom);
-
-    QValueAxis* axisY = new QValueAxis();
-    axisY->setTitleText("Count");
-    axisY->setLabelFormat("%d");
-    axisY->setLabelsColor(QColor(234, 234, 234));
-    axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    chart->addAxis(axisY, Qt::AlignLeft);
-
-    series->attachAxis(axisX);
-    series->attachAxis(axisY);
-}
-
-void Defect_Data_Display::updatePlatformChart(const QMap<int, QPair<int, int>>& platformStats)
-{
-    QChart* chart = ((QChartView*)m_chartViewPlatform)->chart();
-    chart->removeAllSeries();
-
-    for (auto axis : chart->axes()) {
-        chart->removeAxis(axis);
-    }
-
-    if (platformStats.isEmpty()) {
-        return;
-    }
-
-    QStringList categories;
-    QBarSet* passSet = new QBarSet("Pass");
-    passSet->setColor(QColor(0, 255, 136));
-    passSet->setLabelColor(QColor(234, 234, 234));
-
-    QBarSet* failSet = new QBarSet("Fail");
-    failSet->setColor(QColor(255, 68, 68));
-    failSet->setLabelColor(QColor(234, 234, 234));
-
-    QMap<int, QPair<int, int>>::const_iterator it;
-    for (it = platformStats.constBegin(); it != platformStats.constEnd(); ++it) {
-        categories.append(QString("P%1").arg(it.key()));
-        *passSet << it.value().first;
-        *failSet << it.value().second;
-    }
-
-    QBarSeries* series = new QBarSeries();
-    series->append(passSet);
-    series->append(failSet);
-
-    chart->addSeries(series);
-    chart->setTitle("Platform Stats");
-
-    QBarCategoryAxis* axisX = new QBarCategoryAxis();
-    axisX->append(categories);
-    axisX->setLabelsColor(QColor(234, 234, 234));
-    chart->addAxis(axisX, Qt::AlignBottom);
-
-    QValueAxis* axisY = new QValueAxis();
-    axisY->setTitleText("Count");
     axisY->setLabelFormat("%d");
     axisY->setLabelsColor(QColor(234, 234, 234));
     axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -837,6 +878,9 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
         return;
     }
 
+    // Determine time format based on current selection
+    QString timeRange = ui.comboTimeRange->currentText();
+
     QLineSeries* defectSeries = new QLineSeries();
     defectSeries->setName("Defect Count");
     defectSeries->setColor(QColor(255, 100, 100));
@@ -844,7 +888,25 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     QStringList categories;
     int index = 0;
     for (auto it = trendData.constBegin(); it != trendData.constEnd(); ++it) {
-        categories.append(it.key());
+        QString label = it.key();
+        // Format label based on time range
+        if (timeRange == "按小时") {
+            // Extract hour from "2026-05-22 00:00"
+            if (label.contains(" ")) {
+                QString timePart = label.split(" ").at(1);
+                label = timePart.left(5);  // Get "HH:00"
+            }
+        } else if (timeRange == "按天") {
+            // Show only day "2026-05-22" -> "22"
+            if (label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3) {
+                    label = parts.at(2);  // Get day number
+                }
+            }
+        }
+        // 按月: keep as "2026-05"
+        categories.append(label);
         defectSeries->append(index++, it.value().first);
     }
 
@@ -870,6 +932,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     rateSeries->setName("Defect Rate (%)");
     rateSeries->setColor(QColor(0, 217, 255));
 
+    // Reuse the same categories from defect series for rate chart
     index = 0;
     for (auto it = defectRates.constBegin(); it != defectRates.constEnd(); ++it) {
         rateSeries->append(index++, it.value());
@@ -878,12 +941,9 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     chartRate->addSeries(rateSeries);
     chartRate->setTitle("Defect Rate Trend");
 
+    // Use the same formatted categories as defect chart
     QBarCategoryAxis* axisXRate = new QBarCategoryAxis();
-    QStringList rateCategories;
-    for (int i = 0; i < defectRates.size(); ++i) {
-        rateCategories.append(QString::number(i + 1));
-    }
-    axisXRate->append(rateCategories);
+    axisXRate->append(categories);
     axisXRate->setLabelsColor(QColor(234, 234, 234));
     chartRate->addAxis(axisXRate, Qt::AlignBottom);
 
@@ -975,6 +1035,333 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     }
 }
 
+void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData)
+{
+    qDebug() << "updatePlatformTrendChart called with" << platformTrendData.size() << "time periods";
+
+    if (platformTrendData.isEmpty()) {
+        qDebug() << "No platform trend data";
+        return;
+    }
+
+    QString timeRange = ui.comboTimeRange->currentText();
+
+    // Get all time periods sorted
+    QStringList timeCategories;
+    for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
+        QString label = it.key();
+        // Format label based on time range
+        if (timeRange == "按小时") {
+            if (label.contains(" ")) {
+                QString timePart = label.split(" ").at(1);
+                label = timePart.left(5);
+            }
+        } else if (timeRange == "按天") {
+            if (label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3) {
+                    label = parts.at(2);
+                }
+            }
+        }
+        // 按月: keep as is
+        timeCategories.append(label);
+    }
+
+    // Sort time categories properly
+    if (timeRange == "按小时" || timeRange == "按天") {
+        std::sort(timeCategories.begin(), timeCategories.end(), [](const QString& a, const QString& b) {
+            return a.toInt() < b.toInt();
+        });
+    }
+
+    // Platform colors
+    QList<QColor> platformColors = {
+        QColor(0, 255, 136),    // P0 - Green
+        QColor(255, 200, 0),    // P1 - Yellow
+        QColor(0, 150, 255),    // P2 - Blue
+        QColor(255, 100, 100)   // P3 - Red
+    };
+
+    QStringList platformNames = {"P0", "P1", "P2", "P3"};
+
+    // Create chart for each platform
+    void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+    for (int p = 0; p < 4; ++p) {
+        QChartView* chartView = (QChartView*)chartViewPtrs[p];
+        QChart* chart = chartView->chart();
+        chart->removeAllSeries();
+        for (auto axis : chart->axes()) {
+            chart->removeAxis(axis);
+        }
+
+        QBarSeries* series = new QBarSeries();
+        QBarSet* failSet = new QBarSet("Fail");
+        failSet->setColor(platformColors[p]);
+        failSet->setLabelColor(QColor(234, 234, 234));
+
+        // Populate data for this platform
+        for (const QString& timeKey : timeCategories) {
+            // Find original key
+            QString originalKey;
+            for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
+                QString label = it.key();
+                if (timeRange == "按小时" && label.contains(" ")) {
+                    QString timePart = label.split(" ").at(1);
+                    if (timePart.left(5) == timeKey) {
+                        originalKey = it.key();
+                        break;
+                    }
+                } else if (timeRange == "按天" && label.contains("-")) {
+                    QStringList parts = label.split("-");
+                    if (parts.size() >= 3 && parts.at(2) == timeKey) {
+                        originalKey = it.key();
+                        break;
+                    }
+                } else if (timeRange == "按月" && label == timeKey) {
+                    originalKey = it.key();
+                    break;
+                }
+            }
+
+            if (!originalKey.isEmpty() && platformTrendData.contains(originalKey)) {
+                const QMap<int, QPair<int, int>>& platformData = platformTrendData[originalKey];
+                if (platformData.contains(p)) {
+                    *failSet << platformData[p].second;
+                } else {
+                    *failSet << 0;
+                }
+            } else {
+                *failSet << 0;
+            }
+        }
+
+        series->append(failSet);
+        chart->addSeries(series);
+        chart->setTitle(platformNames[p] + " (" + timeRange + ") - Fail");
+        chart->legend()->hide();
+
+        QBarCategoryAxis* axisX = new QBarCategoryAxis();
+        axisX->append(timeCategories);
+        axisX->setLabelsColor(QColor(234, 234, 234));
+        QFont axisXFont = axisX->labelsFont();
+        axisXFont.setPointSize(10);
+        axisX->setLabelsFont(axisXFont);
+        chart->addAxis(axisX, Qt::AlignBottom);
+
+        QValueAxis* axisY = new QValueAxis();
+        axisY->setTitleText("Fail Count");
+        axisY->setLabelFormat("%d");
+        axisY->setLabelsColor(QColor(234, 234, 234));
+        QFont axisYFont = axisY->labelsFont();
+        axisYFont.setPointSize(10);
+        axisY->setLabelsFont(axisYFont);
+        axisY->setTitleBrush(QBrush(platformColors[p]));
+        chart->addAxis(axisY, Qt::AlignLeft);
+
+        series->attachAxis(axisX);
+        series->attachAxis(axisY);
+    }
+}
+
+void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QString, int>>& defectTrendData)
+{
+    qDebug() << "updateDefectTrendChart called with" << defectTrendData.size() << "time periods";
+
+    QChart* chart = ((QChartView*)m_chartViewAoi)->chart();
+    chart->removeAllSeries();
+
+    for (auto axis : chart->axes()) {
+        chart->removeAxis(axis);
+    }
+
+    if (defectTrendData.isEmpty()) {
+        qDebug() << "No defect trend data";
+        return;
+    }
+
+    // Get all unique defect types
+    QSet<QString> allDefectTypes;
+    for (auto it = defectTrendData.constBegin(); it != defectTrendData.constEnd(); ++it) {
+        for (auto typeIt = it.value().constBegin(); typeIt != it.value().constEnd(); ++typeIt) {
+            allDefectTypes.insert(typeIt.key());
+        }
+    }
+
+    QString timeRange = ui.comboTimeRange->currentText();
+    QStringList timeCategories;
+    QMap<QString, QColor> defectColors;
+    defectColors["BlackDot"] = Qt::darkGray;
+    defectColors["BrightDot"] = QColor(255, 200, 0);
+    defectColors["Line"] = Qt::blue;
+    defectColors["Mura"] = Qt::red;
+    defectColors["Block"] = Qt::green;
+
+    // Create a line series for each defect type
+    QMap<QString, QLineSeries*> seriesMap;
+    for (const QString& defectType : allDefectTypes) {
+        QLineSeries* series = new QLineSeries();
+        series->setName(defectType);
+        series->setColor(defectColors.value(defectType, Qt::gray));
+        seriesMap[defectType] = series;
+    }
+
+    // Populate data
+    int index = 0;
+    for (auto it = defectTrendData.constBegin(); it != defectTrendData.constEnd(); ++it) {
+        QString label = it.key();
+        // Format label
+        if (timeRange == "按小时") {
+            if (label.contains(" ")) {
+                QString timePart = label.split(" ").at(1);
+                label = timePart.left(5);
+            }
+        } else if (timeRange == "按天") {
+            if (label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3) {
+                    label = parts.at(2);
+                }
+            }
+        }
+        timeCategories.append(label);
+
+        for (const QString& defectType : allDefectTypes) {
+            int count = it.value().value(defectType, 0);
+            seriesMap[defectType]->append(index, count);
+        }
+        index++;
+    }
+
+    // Add series to chart
+    for (auto series : seriesMap.values()) {
+        chart->addSeries(series);
+    }
+    chart->setTitle("Defect Analysis Trend (" + timeRange + ")");
+
+    QBarCategoryAxis* axisX = new QBarCategoryAxis();
+    axisX->append(timeCategories);
+    axisX->setLabelsColor(QColor(234, 234, 234));
+    chart->addAxis(axisX, Qt::AlignBottom);
+
+    QValueAxis* axisY = new QValueAxis();
+    axisY->setTitleText("Defect Count");
+    axisY->setLabelFormat("%d");
+    axisY->setLabelsColor(QColor(234, 234, 234));
+    axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    chart->addAxis(axisY, Qt::AlignLeft);
+
+    for (auto series : seriesMap.values()) {
+        series->attachAxis(axisX);
+        series->attachAxis(axisY);
+    }
+}
+
+void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<int, int>>& inspectionTrendData)
+{
+    qDebug() << "updateInspectionTrendChart called with" << inspectionTrendData.size() << "data points";
+
+    if (inspectionTrendData.isEmpty()) {
+        qDebug() << "No inspection trend data";
+        return;
+    }
+
+    QString timeRange = ui.comboTimeRange->currentText();
+    QStringList timeCategories;
+
+    // Pass chart
+    QChart* passChart = ((QChartView*)m_chartViewInspectionPass)->chart();
+    passChart->removeAllSeries();
+    for (auto axis : passChart->axes()) {
+        passChart->removeAxis(axis);
+    }
+
+    // Fail chart
+    QChart* failChart = ((QChartView*)m_chartViewInspectionFail)->chart();
+    failChart->removeAllSeries();
+    for (auto axis : failChart->axes()) {
+        failChart->removeAxis(axis);
+    }
+
+    // Create Pass series
+    QBarSeries* passBarSeries = new QBarSeries();
+    QBarSet* passSet = new QBarSet("Pass");
+    passSet->setColor(QColor(0, 255, 136));
+    passSet->setLabelColor(QColor(234, 234, 234));
+
+    // Create Fail series
+    QBarSeries* failBarSeries = new QBarSeries();
+    QBarSet* failSet = new QBarSet("Fail");
+    failSet->setColor(QColor(255, 68, 68));
+    failSet->setLabelColor(QColor(234, 234, 234));
+
+    int index = 0;
+    for (auto it = inspectionTrendData.constBegin(); it != inspectionTrendData.constEnd(); ++it) {
+        QString label = it.key();
+        // Format label
+        if (timeRange == "按小时") {
+            if (label.contains(" ")) {
+                QString timePart = label.split(" ").at(1);
+                label = timePart.left(5);
+            }
+        } else if (timeRange == "按天") {
+            if (label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3) {
+                    label = parts.at(2);
+                }
+            }
+        }
+        // 按月: keep as is
+        timeCategories.append(label);
+
+        *passSet << it.value().first;
+        *failSet << it.value().second;
+        index++;
+    }
+
+    passBarSeries->append(passSet);
+    failBarSeries->append(failSet);
+
+    passChart->addSeries(passBarSeries);
+    passChart->setTitle("Pass Count (" + timeRange + ")");
+
+    failChart->addSeries(failBarSeries);
+    failChart->setTitle("Fail Count (" + timeRange + ")");
+
+    // Pass chart axes
+    QBarCategoryAxis* passAxisX = new QBarCategoryAxis();
+    passAxisX->append(timeCategories);
+    passAxisX->setLabelsColor(QColor(234, 234, 234));
+    passChart->addAxis(passAxisX, Qt::AlignBottom);
+
+    QValueAxis* passAxisY = new QValueAxis();
+    passAxisY->setTitleText("Count");
+    passAxisY->setLabelFormat("%d");
+    passAxisY->setLabelsColor(QColor(234, 234, 234));
+    passAxisY->setTitleBrush(QBrush(QColor(0, 255, 136)));
+    passChart->addAxis(passAxisY, Qt::AlignLeft);
+
+    passBarSeries->attachAxis(passAxisX);
+    passBarSeries->attachAxis(passAxisY);
+
+    // Fail chart axes
+    QBarCategoryAxis* failAxisX = new QBarCategoryAxis();
+    failAxisX->append(timeCategories);
+    failAxisX->setLabelsColor(QColor(234, 234, 234));
+    failChart->addAxis(failAxisX, Qt::AlignBottom);
+
+    QValueAxis* failAxisY = new QValueAxis();
+    failAxisY->setTitleText("Count");
+    failAxisY->setLabelFormat("%d");
+    failAxisY->setLabelsColor(QColor(234, 234, 234));
+    failAxisY->setTitleBrush(QBrush(QColor(255, 68, 68)));
+    failChart->addAxis(failAxisY, Qt::AlignLeft);
+
+    failBarSeries->attachAxis(failAxisX);
+    failBarSeries->attachAxis(failAxisY);
+}
+
 DataLoaderThread::DataLoaderThread(int loadId, const QString& timeRange, const QString& dateRange, QObject* parent)
     : QThread(parent)
     , m_loadId(loadId)
@@ -1009,7 +1396,104 @@ void DataLoaderThread::run()
     qDebug() << "Time range:" << m_timeRange;
     qDebug() << "Date range:" << m_dateRange;
 
-    qDebug() << "Executing combined optimized query...";
+    // Get time format based on time range
+    QString timeFormat;
+    if (m_timeRange == "按小时") {
+        timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
+    } else if (m_timeRange == "按天") {
+        timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d')";
+    } else {
+        timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
+    }
+
+    // Query 1: Platform trend by time period (per platform)
+    qDebug() << "Querying platform trend...";
+    QString platformTrendQuery = QString(R"(
+        SELECT %1 as time_period, PlatformID,
+               SUM(IF(AOIResult = 'OK', 1, 0)) as pass_cnt,
+               SUM(IF(AOIResult != 'OK', 1, 0)) as fail_cnt
+        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        WHERE %2
+        GROUP BY time_period, PlatformID
+        ORDER BY time_period, PlatformID
+    )").arg(timeFormat).arg(m_dateRange);
+
+    QSqlQuery platformTrendQ(db);
+    platformTrendQ.setForwardOnly(true);
+    QMap<QString, QMap<int, QPair<int, int>>> platformTrendData;
+
+    if (platformTrendQ.exec(platformTrendQuery)) {
+        while (platformTrendQ.next()) {
+            QString period = platformTrendQ.value(0).toString();
+            int platformId = platformTrendQ.value(1).toInt();
+            int pass = platformTrendQ.value(2).toInt();
+            int fail = platformTrendQ.value(3).toInt();
+            // Store data per platform
+            platformTrendData[period][platformId] = qMakePair(pass, fail);
+        }
+    } else {
+        qDebug() << "Platform trend query failed:" << platformTrendQ.lastError().text();
+    }
+
+    // Query 2: Defect trend by time period
+    qDebug() << "Querying defect trend...";
+    QString defectTrendQuery = QString(R"(
+        SELECT %1 as time_period, Type, COUNT(*) as cnt
+        FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+        WHERE %2
+        GROUP BY time_period, Type
+        ORDER BY time_period
+    )").arg(timeFormat).arg(m_dateRange);
+
+    QSqlQuery defectTrendQ(db);
+    defectTrendQ.setForwardOnly(true);
+    QMap<QString, QMap<QString, int>> defectTrendData;
+
+    if (defectTrendQ.exec(defectTrendQuery)) {
+        while (defectTrendQ.next()) {
+            QString period = defectTrendQ.value(0).toString();
+            QString defectType = defectTrendQ.value(1).toString();
+            int cnt = defectTrendQ.value(2).toInt();
+            defectTrendData[period][defectType] = cnt;
+        }
+    } else {
+        qDebug() << "Defect trend query failed:" << defectTrendQ.lastError().text();
+    }
+
+    // Query 3: Inspection trend by time period
+    qDebug() << "Querying inspection trend...";
+    QString inspectionTrendQuery = QString(R"(
+        SELECT %1 as time_period,
+               SUM(IF(AOIResult = 'OK', 1, 0)) as pass_cnt,
+               SUM(IF(AOIResult != 'OK', 1, 0)) as fail_cnt
+        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        WHERE %2
+        GROUP BY time_period
+        ORDER BY time_period
+    )").arg(timeFormat).arg(m_dateRange);
+
+    QSqlQuery inspectionTrendQ(db);
+    inspectionTrendQ.setForwardOnly(true);
+    QMap<QString, QPair<int, int>> inspectionTrendData;
+
+    if (inspectionTrendQ.exec(inspectionTrendQuery)) {
+        while (inspectionTrendQ.next()) {
+            QString period = inspectionTrendQ.value(0).toString();
+            int pass = inspectionTrendQ.value(1).toInt();
+            int fail = inspectionTrendQ.value(2).toInt();
+            inspectionTrendData[period] = qMakePair(pass, fail);
+        }
+    } else {
+        qDebug() << "Inspection trend query failed:" << inspectionTrendQ.lastError().text();
+    }
+
+    // Emit trend data signals
+    emit platformTrendLoaded(platformTrendData, m_timeRange);
+    emit defectTrendLoaded(defectTrendData, m_timeRange);
+    emit inspectionTrendLoaded(inspectionTrendData, m_timeRange);
+
+    // Original combined query for totals
+    qDebug() << "Executing combined optimized query for totals...";
 
     QString combinedQueryStr = QString(R"(
         SELECT 'aoi' as query_type, Type as defect_type, COUNT(*) as cnt, 0 as platform_id, 0 as pass_cnt, 0 as fail_cnt
