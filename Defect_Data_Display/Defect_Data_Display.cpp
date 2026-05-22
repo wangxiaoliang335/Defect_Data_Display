@@ -407,18 +407,26 @@ void Defect_Data_Display::onRefreshClicked()
     qDebug() << "=== onRefreshClicked called ===";
     qDebug() << "m_isLoading:" << m_isLoading;
 
-    if (m_isLoading) {
-        qDebug() << "Already loading, stopping previous and starting new...";
-        if (m_workerThread) {
-            m_workerThread->quit();
-            m_workerThread->wait(100);
-            if (m_workerThread->isRunning()) {
-                m_workerThread->terminate();
-            }
-            delete m_workerThread;
-            m_workerThread = nullptr;
+    // Clear all charts to show empty state
+    clearAllCharts();
+
+    // Disable time range combo and date edit while loading
+    ui.comboTimeRange->setEnabled(false);
+    ui.dateEdit->setEnabled(false);
+
+    // First, ensure any existing thread is fully cleaned up
+    if (m_workerThread) {
+        m_workerThread->quit();
+        m_workerThread->wait(200);
+        if (m_workerThread->isRunning()) {
+            m_workerThread->terminate();
         }
+        delete m_workerThread;
+        m_workerThread = nullptr;
     }
+
+    // Reset loading state when starting new load
+    m_isLoading = false;
 
     QString timeRange = ui.comboTimeRange->currentText();
     qDebug() << "Time range:" << timeRange;
@@ -457,6 +465,53 @@ void Defect_Data_Display::onRefreshClicked()
     qDebug() << "Worker thread started";
 }
 
+void Defect_Data_Display::clearAllCharts()
+{
+    // Clear platform charts
+    void* platformCharts[] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+    for (int i = 0; i < 4; ++i) {
+        QChart* chart = ((QChartView*)platformCharts[i])->chart();
+        chart->removeAllSeries();
+        for (auto axis : chart->axes()) {
+            chart->removeAxis(axis);
+        }
+    }
+
+    // Clear AOI chart
+    QChart* aoiChart = ((QChartView*)m_chartViewAoi)->chart();
+    aoiChart->removeAllSeries();
+    for (auto axis : aoiChart->axes()) {
+        aoiChart->removeAxis(axis);
+    }
+
+    // Clear inspection charts
+    QChart* passChart = ((QChartView*)m_chartViewInspectionPass)->chart();
+    passChart->removeAllSeries();
+    for (auto axis : passChart->axes()) {
+        passChart->removeAxis(axis);
+    }
+
+    QChart* failChart = ((QChartView*)m_chartViewInspectionFail)->chart();
+    failChart->removeAllSeries();
+    for (auto axis : failChart->axes()) {
+        failChart->removeAxis(axis);
+    }
+
+    // Clear defect mapping chart
+    QChart* mappingChart = ((QChartView*)m_chartViewDefectMapping)->chart();
+    mappingChart->removeAllSeries();
+    for (auto axis : mappingChart->axes()) {
+        mappingChart->removeAxis(axis);
+    }
+
+    // Clear trend chart
+    QChart* trendChart = ((QChartView*)m_chartViewTrend)->chart();
+    trendChart->removeAllSeries();
+    for (auto axis : trendChart->axes()) {
+        trendChart->removeAxis(axis);
+    }
+}
+
 void Defect_Data_Display::onTimeRangeChanged(int index)
 {
     Q_UNUSED(index);
@@ -468,10 +523,18 @@ void Defect_Data_Display::onLoadFinished(int loadId)
     qDebug() << "=== onLoadFinished called ===" << "loadId:" << loadId << "currentLoadId:" << m_currentLoadId;
     if (loadId != m_currentLoadId) {
         qDebug() << "Stale load, ignoring";
+        // Check if we should reset loading state anyway
+        // This happens when newer loads have already completed
+        // But we should still re-enable controls
+        ui.btnRefresh->setEnabled(true);
+        ui.comboTimeRange->setEnabled(true);
+        ui.dateEdit->setEnabled(true);
         return;
     }
     m_isLoading = false;
     ui.btnRefresh->setEnabled(true);
+    ui.comboTimeRange->setEnabled(true);
+    ui.dateEdit->setEnabled(true);
     ui.labelStatus->setText("Updated " + QDateTime::currentDateTime().toString("HH:mm:ss"));
     ui.labelStatus->setStyleSheet("color: #00ff88;");
 }
@@ -1589,8 +1652,12 @@ void Defect_Data_Display::loadDefectMappingAsync(const QString& timeRange)
     if (m_isTabLoading) {
         if (m_tabWorkerThread) {
             m_tabWorkerThread->quit();
-            m_tabWorkerThread->wait(50);
+            m_tabWorkerThread->wait(500);
+            if (m_tabWorkerThread->isFinished()) {
+                m_tabWorkerThread->deleteLater();
+            }
         }
+        m_isTabLoading = false;
     }
 
     ++m_currentLoadId;
@@ -1598,6 +1665,7 @@ void Defect_Data_Display::loadDefectMappingAsync(const QString& timeRange)
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 3, timeRange,
         getDateTimeRange(timeRange), m_selectedDate, this);
+    m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::defectMappingDataLoaded,
             this, &Defect_Data_Display::onDataLoaded_DefectMapping, Qt::QueuedConnection);
@@ -1618,8 +1686,12 @@ void Defect_Data_Display::loadTrendDataAsync(const QString& timeRange)
     if (m_isTabLoading) {
         if (m_tabWorkerThread) {
             m_tabWorkerThread->quit();
-            m_tabWorkerThread->wait(50);
+            m_tabWorkerThread->wait(500);
+            if (m_tabWorkerThread->isFinished()) {
+                m_tabWorkerThread->deleteLater();
+            }
         }
+        m_isTabLoading = false;
     }
 
     ++m_currentLoadId;
@@ -1627,6 +1699,7 @@ void Defect_Data_Display::loadTrendDataAsync(const QString& timeRange)
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 4, timeRange,
         getDateTimeRange(timeRange), m_selectedDate, this);
+    m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::trendDataLoaded,
             this, &Defect_Data_Display::onDataLoaded_Trend, Qt::QueuedConnection);
@@ -1638,7 +1711,6 @@ void Defect_Data_Display::loadTrendDataAsync(const QString& timeRange)
                 }
             }, Qt::QueuedConnection);
 
-    m_isTabLoading = true;
     m_tabWorkerThread->start();
 }
 
@@ -1647,8 +1719,12 @@ void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
     if (m_isTabLoading) {
         if (m_tabWorkerThread) {
             m_tabWorkerThread->quit();
-            m_tabWorkerThread->wait(50);
+            m_tabWorkerThread->wait(500);
+            if (m_tabWorkerThread->isFinished()) {
+                m_tabWorkerThread->deleteLater();
+            }
         }
+        m_isTabLoading = false;
     }
 
     ++m_currentLoadId;
@@ -1656,6 +1732,7 @@ void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 5, timeRange,
         getDateTimeRange(timeRange), m_selectedDate, this);
+    m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::detailDataLoaded,
             this, &Defect_Data_Display::onDataLoaded_Detail, Qt::QueuedConnection);
@@ -1667,7 +1744,6 @@ void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
                 }
             }, Qt::QueuedConnection);
 
-    m_isTabLoading = true;
     m_tabWorkerThread->start();
 }
 
@@ -1694,7 +1770,8 @@ void TabDataLoaderThread::run()
                               "PWD=123456;"
                               "OPTION=8;";
 
-    QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", "tab_worker_connection");
+    QString connectionName = QString("tab_worker_connection_%1").arg((quint64)this);
+    QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", connectionName);
     db.setDatabaseName(connectionString);
     db.setConnectOptions("SQL_ATTR_CONNECTION_TIMEOUT=30000;SQL_ATTR_QUERY_TIMEOUT=30000");
 
@@ -1811,7 +1888,7 @@ void TabDataLoaderThread::run()
     }
 
     db.close();
-    QSqlDatabase::removeDatabase("tab_worker_connection");
+    QSqlDatabase::removeDatabase(connectionName);
 
     qDebug() << "Tab worker thread finished" << m_tabIndex;
     emit finished(m_loadId, m_tabIndex);

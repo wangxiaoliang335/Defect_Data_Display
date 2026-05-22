@@ -133,6 +133,7 @@ private:
     QString getTimeFilterClause(const QString& timeRange);
     QString getDateTimeRange(const QString& timeRange);
     void setupCharts();
+    void clearAllCharts();
 
     // New functions for time-based trend display
     void updatePlatformTrendChart(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData);
