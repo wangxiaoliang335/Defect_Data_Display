@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QTimer>
 #include <QMouseEvent>
+#include <QApplication>
 
 Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     : QMainWindow(parent)
@@ -21,8 +22,14 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_chartViewTrend(nullptr)
     , m_chartViewDefectRate(nullptr)
     , m_timer(nullptr)
+    , m_workerThread(nullptr)
+    , m_tabWorkerThread(nullptr)
+    , m_currentLoadId(0)
     , m_selectedDate(QDate::currentDate())
     , m_isDragging(false)
+    , m_isLoading(false)
+    , m_isTabLoading(false)
+    , m_lastMainLoadTime(0)
 {
     setWindowFlags(Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -48,12 +55,14 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     updateDateTime();
 
     if (!connectToDatabase()) {
-        ui.labelStatus->setText("状态: 数据库断开");
+        ui.labelStatus->setText("Status: DB Disconnected");
         ui.labelStatus->setStyleSheet("color: #ff4444;");
     } else {
-        ui.labelStatus->setText("状态: 已连接");
+        ui.labelStatus->setText("Status: Connected - Loading...");
         ui.labelStatus->setStyleSheet("color: #00ff88;");
-        onRefreshClicked();
+        QTimer::singleShot(500, this, [this]() {
+            onRefreshClicked();
+        });
     }
 }
 
@@ -61,6 +70,22 @@ Defect_Data_Display::~Defect_Data_Display()
 {
     if (m_timer) {
         m_timer->stop();
+    }
+    if (m_workerThread) {
+        m_workerThread->quit();
+        m_workerThread->wait(100);
+        if (m_workerThread->isRunning()) {
+            m_workerThread->terminate();
+        }
+        delete m_workerThread;
+    }
+    if (m_tabWorkerThread) {
+        m_tabWorkerThread->quit();
+        m_tabWorkerThread->wait(100);
+        if (m_tabWorkerThread->isRunning()) {
+            m_tabWorkerThread->terminate();
+        }
+        delete m_tabWorkerThread;
     }
     if (m_db.isOpen()) {
         m_db.close();
@@ -104,6 +129,7 @@ void Defect_Data_Display::onCloseClicked()
 
 void Defect_Data_Display::onDateChanged(const QDate& date)
 {
+    qDebug() << "=== onDateChanged called ===" << date.toString();
     m_selectedDate = date;
     onRefreshClicked();
 }
@@ -112,21 +138,39 @@ void Defect_Data_Display::onTabChanged(int index)
 {
     QString timeRange = ui.comboTimeRange->currentText();
 
-    QTimer::singleShot(100, this, [this, index, timeRange]() {
+    QTimer::singleShot(50, this, [this, index, timeRange]() {
         switch (index) {
         case 0:
         case 1:
         case 2:
             break;
-        case 3:
-            loadDefectMapping(timeRange);
+        case 3: {
+            CachedTabData* cache = &m_defectMappingCache;
+            if (isCacheValid(cache, timeRange, m_selectedDate)) {
+                updateDefectMappingChart(cache->positions, cache->types);
+            } else {
+                loadDefectMappingAsync(timeRange);
+            }
             break;
-        case 4:
-            loadTrendData(timeRange);
+        }
+        case 4: {
+            CachedTabData* cache = &m_trendCache;
+            if (isCacheValid(cache, timeRange, m_selectedDate)) {
+                updateTrendChart(cache->trendData, cache->defectRates);
+            } else {
+                loadTrendDataAsync(timeRange);
+            }
             break;
-        case 5:
-            loadDetailData(timeRange);
+        }
+        case 5: {
+            CachedTabData* cache = &m_detailCache;
+            if (isCacheValid(cache, timeRange, m_selectedDate)) {
+                updateDetailTable(cache->defectDetails);
+            } else {
+                loadDetailDataAsync(timeRange);
+            }
             break;
+        }
         default:
             break;
         }
@@ -141,8 +185,8 @@ void Defect_Data_Display::updateDateTime()
 void Defect_Data_Display::setupCharts()
 {
     QChart* chartPlatform = new QChart();
-    chartPlatform->setTitle("各工位检测统计");
-    chartPlatform->setAnimationOptions(QChart::SeriesAnimations);
+    chartPlatform->setTitle("Platform Stats");
+    chartPlatform->setAnimationOptions(QChart::NoAnimation);
     chartPlatform->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     chartPlatform->setTitleBrush(QBrush(QColor(0, 217, 255)));
     chartPlatform->legend()->setLabelColor(QColor(234, 234, 234));
@@ -157,8 +201,8 @@ void Defect_Data_Display::setupCharts()
     layoutPlatform->addWidget((QChartView*)m_chartViewPlatform);
 
     QChart* chartAoi = new QChart();
-    chartAoi->setTitle("AOI 缺陷分析");
-    chartAoi->setAnimationOptions(QChart::SeriesAnimations);
+    chartAoi->setTitle("AOI Defect Analysis");
+    chartAoi->setAnimationOptions(QChart::NoAnimation);
     chartAoi->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     chartAoi->setTitleBrush(QBrush(QColor(0, 217, 255)));
     chartAoi->legend()->setLabelColor(QColor(234, 234, 234));
@@ -173,8 +217,8 @@ void Defect_Data_Display::setupCharts()
     layoutAoi->addWidget((QChartView*)m_chartViewAoi);
 
     QChart* chartInspection = new QChart();
-    chartInspection->setTitle("检测结果统计");
-    chartInspection->setAnimationOptions(QChart::SeriesAnimations);
+    chartInspection->setTitle("Inspection Results");
+    chartInspection->setAnimationOptions(QChart::NoAnimation);
     chartInspection->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     chartInspection->setTitleBrush(QBrush(QColor(0, 217, 255)));
     chartInspection->legend()->setLabelColor(QColor(234, 234, 234));
@@ -189,8 +233,8 @@ void Defect_Data_Display::setupCharts()
     layoutInspection->addWidget((QChartView*)m_chartViewInspection);
 
     QChart* chartMapping = new QChart();
-    chartMapping->setTitle("缺陷位置分布");
-    chartMapping->setAnimationOptions(QChart::SeriesAnimations);
+    chartMapping->setTitle("Defect Position Map");
+    chartMapping->setAnimationOptions(QChart::NoAnimation);
     chartMapping->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     chartMapping->setTitleBrush(QBrush(QColor(0, 217, 255)));
     chartMapping->legend()->setLabelColor(QColor(234, 234, 234));
@@ -205,8 +249,8 @@ void Defect_Data_Display::setupCharts()
     layoutMapping->addWidget((QChartView*)m_chartViewDefectMapping);
 
     QChart* chartTrend = new QChart();
-    chartTrend->setTitle("缺陷数量趋势");
-    chartTrend->setAnimationOptions(QChart::SeriesAnimations);
+    chartTrend->setTitle("Defect Count Trend");
+    chartTrend->setAnimationOptions(QChart::NoAnimation);
     chartTrend->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     chartTrend->setTitleBrush(QBrush(QColor(0, 217, 255)));
     chartTrend->legend()->setLabelColor(QColor(234, 234, 234));
@@ -221,8 +265,8 @@ void Defect_Data_Display::setupCharts()
     layoutTrend->addWidget((QChartView*)m_chartViewTrend);
 
     QChart* chartDefectRate = new QChart();
-    chartDefectRate->setTitle("缺陷率趋势");
-    chartDefectRate->setAnimationOptions(QChart::SeriesAnimations);
+    chartDefectRate->setTitle("Defect Rate Trend");
+    chartDefectRate->setAnimationOptions(QChart::NoAnimation);
     chartDefectRate->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     chartDefectRate->setTitleBrush(QBrush(QColor(0, 217, 255)));
     chartDefectRate->legend()->setLabelColor(QColor(234, 234, 234));
@@ -260,6 +304,133 @@ bool Defect_Data_Display::connectToDatabase()
     return true;
 }
 
+void Defect_Data_Display::onRefreshClicked()
+{
+    qDebug() << "=== onRefreshClicked called ===";
+    qDebug() << "m_isLoading:" << m_isLoading;
+
+    if (m_isLoading) {
+        qDebug() << "Already loading, stopping previous and starting new...";
+        if (m_workerThread) {
+            m_workerThread->quit();
+            m_workerThread->wait(100);
+            if (m_workerThread->isRunning()) {
+                m_workerThread->terminate();
+            }
+            delete m_workerThread;
+            m_workerThread = nullptr;
+        }
+    }
+
+    QString timeRange = ui.comboTimeRange->currentText();
+    qDebug() << "Time range:" << timeRange;
+    qDebug() << "Selected date:" << m_selectedDate;
+
+    ui.labelStatus->setText("Loading...");
+    ui.labelStatus->setStyleSheet("color: #ffaa00;");
+
+    m_isLoading = true;
+    ui.btnRefresh->setEnabled(false);
+    ++m_currentLoadId;
+    int thisLoadId = m_currentLoadId;
+
+    qDebug() << "Creating new worker thread with loadId:" << thisLoadId;
+    m_workerThread = new DataLoaderThread(thisLoadId, timeRange, getDateTimeRange(timeRange), this);
+
+    connect(m_workerThread, &DataLoaderThread::aoiDataLoaded,
+            this, &Defect_Data_Display::onDataLoaded_Aoi, Qt::QueuedConnection);
+    connect(m_workerThread, &DataLoaderThread::inspectionDataLoaded,
+            this, &Defect_Data_Display::onDataLoaded_Inspection, Qt::QueuedConnection);
+    connect(m_workerThread, &DataLoaderThread::platformDataLoaded,
+            this, &Defect_Data_Display::onDataLoaded_Platform, Qt::QueuedConnection);
+    connect(m_workerThread, &DataLoaderThread::finished,
+            this, [this](int loadId) { onLoadFinished(loadId); }, Qt::QueuedConnection);
+
+    qDebug() << "Starting worker thread...";
+    m_workerThread->start();
+    qDebug() << "Worker thread started";
+}
+
+void Defect_Data_Display::onTimeRangeChanged(int index)
+{
+    Q_UNUSED(index);
+    onRefreshClicked();
+}
+
+void Defect_Data_Display::onLoadFinished(int loadId)
+{
+    qDebug() << "=== onLoadFinished called ===" << "loadId:" << loadId << "currentLoadId:" << m_currentLoadId;
+    if (loadId != m_currentLoadId) {
+        qDebug() << "Stale load, ignoring";
+        return;
+    }
+    m_isLoading = false;
+    ui.btnRefresh->setEnabled(true);
+    ui.labelStatus->setText("Updated " + QDateTime::currentDateTime().toString("HH:mm:ss"));
+    ui.labelStatus->setStyleSheet("color: #00ff88;");
+}
+
+void Defect_Data_Display::onDataLoaded_Aoi(const QMap<QString, QList<QPair<QString, int>>>& defectByType, int totalDefects)
+{
+    qDebug() << "=== onDataLoaded_Aoi called ===" << "defect types:" << defectByType.size() << "total:" << totalDefects;
+    updateAoiDefectChart(defectByType);
+    ui.statValue5->setText(QString::number(totalDefects));
+}
+
+void Defect_Data_Display::onDataLoaded_Inspection(const QMap<QString, int>& passByPeriod,
+                                                      const QMap<QString, int>& failByPeriod,
+                                                      int totalInspect, int passCount,
+                                                      int failCount, double passRate)
+{
+    qDebug() << "=== onDataLoaded_Inspection called ===" << "total:" << totalInspect << "pass:" << passCount << "fail:" << failCount;
+    updateInspectionResultChart(passByPeriod, failByPeriod);
+    updateStats(totalInspect, passCount, failCount, passRate, 0);
+}
+
+void Defect_Data_Display::onDataLoaded_Platform(const QMap<int, QPair<int, int>>& platformStats)
+{
+    qDebug() << "=== onDataLoaded_Platform called ===" << "platforms:" << platformStats.size();
+    updatePlatformChart(platformStats);
+}
+
+void Defect_Data_Display::onDataLoaded_DefectMapping(const QList<QPair<int, int>>& positions, const QStringList& types)
+{
+    qDebug() << "=== onDataLoaded_DefectMapping called ===" << "positions:" << positions.size();
+
+    m_defectMappingCache.positions = positions;
+    m_defectMappingCache.types = types;
+    m_defectMappingCache.timeRange = ui.comboTimeRange->currentText();
+    m_defectMappingCache.date = m_selectedDate;
+    m_defectMappingCache.timestamp = QDateTime::currentMSecsSinceEpoch();
+
+    updateDefectMappingChart(positions, types);
+}
+
+void Defect_Data_Display::onDataLoaded_Trend(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates)
+{
+    qDebug() << "=== onDataLoaded_Trend called ===" << "data points:" << trendData.size();
+
+    m_trendCache.trendData = trendData;
+    m_trendCache.defectRates = defectRates;
+    m_trendCache.timeRange = ui.comboTimeRange->currentText();
+    m_trendCache.date = m_selectedDate;
+    m_trendCache.timestamp = QDateTime::currentMSecsSinceEpoch();
+
+    updateTrendChart(trendData, defectRates);
+}
+
+void Defect_Data_Display::onDataLoaded_Detail(const QList<QVariantList>& defectDetails)
+{
+    qDebug() << "=== onDataLoaded_Detail called ===" << "records:" << defectDetails.size();
+
+    m_detailCache.defectDetails = defectDetails;
+    m_detailCache.timeRange = ui.comboTimeRange->currentText();
+    m_detailCache.date = m_selectedDate;
+    m_detailCache.timestamp = QDateTime::currentMSecsSinceEpoch();
+
+    updateDetailTable(defectDetails);
+}
+
 QString Defect_Data_Display::getTimeFilterClause(const QString& timeRange)
 {
     if (timeRange == "按小时") {
@@ -288,7 +459,7 @@ QString Defect_Data_Display::getDateTimeRange(const QString& timeRange)
             .arg(year).arg(year + 1);
     }
     return QString("StartTime >= '%1 00:00:00' AND StartTime <= '%1 23:59:59'")
-        .arg(QDate::currentDate().toString("yyyy-MM-dd"));
+        .arg(m_selectedDate.toString("yyyy-MM-dd"));
 }
 
 void Defect_Data_Display::updateStats(int totalInspect, int passCount, int failCount, double passRate, int totalDefects)
@@ -308,54 +479,6 @@ void Defect_Data_Display::updateStats(int totalInspect, int passCount, int failC
         ui.statValue4->setStyleSheet("color: #ff4444; font-size: 32px; font-weight: bold;");
     }
 
-    ui.statValue5->setText(QString::number(totalDefects));
-}
-
-void Defect_Data_Display::loadAoiDefectData(const QString& timeRange)
-{
-    if (!m_db.isOpen() || !m_db.isValid()) {
-        m_db.close();
-        if (!m_db.open() || !m_db.isOpen()) {
-            ui.labelStatus->setText("状态: 连接丢失");
-            ui.labelStatus->setStyleSheet("color: #ff4444;");
-            return;
-        }
-    }
-
-    QString dateRangeClause = getDateTimeRange(timeRange);
-
-    QString queryStr = QString(R"(
-        SELECT
-            Type as defect_type,
-            COUNT(*) as defect_count
-        FROM ivs_lcd_aoidefect
-        WHERE %1
-        GROUP BY Type
-        ORDER BY defect_count DESC
-    )").arg(dateRangeClause);
-
-    qDebug() << "Executing AOI query:" << queryStr;
-
-    QSqlQuery query(m_db);
-    query.setForwardOnly(true);
-
-    if (!query.exec(queryStr)) {
-        qDebug() << "Query failed:" << query.lastError().text();
-        return;
-    }
-
-    int totalDefects = 0;
-    QMap<QString, QList<QPair<QString, int>>> defectByType;
-
-    while (query.next()) {
-        QString defectType = query.value(0).toString();
-        int count = query.value(1).toInt();
-        totalDefects += count;
-
-        defectByType[defectType].append(qMakePair("All", count));
-    }
-
-    updateAoiDefectChart(defectByType);
     ui.statValue5->setText(QString::number(totalDefects));
 }
 
@@ -393,7 +516,7 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
     }
 
     chart->addSeries(series);
-    chart->setTitle("AOI 缺陷分析");
+    chart->setTitle("AOI Defect Analysis");
 
     QBarCategoryAxis* axisX = new QBarCategoryAxis();
     axisX->append(QStringList() << "");
@@ -401,7 +524,7 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
     chart->addAxis(axisX, Qt::AlignBottom);
 
     QValueAxis* axisY = new QValueAxis();
-    axisY->setTitleText("缺陷数量");
+    axisY->setTitleText("Defect Count");
     axisY->setLabelFormat("%d");
     axisY->setLabelsColor(QColor(234, 234, 234));
     axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -409,54 +532,6 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
 
     series->attachAxis(axisX);
     series->attachAxis(axisY);
-}
-
-void Defect_Data_Display::loadInspectionResultData(const QString& timeRange)
-{
-    if (!m_db.isOpen() || !m_db.isValid()) {
-        return;
-    }
-
-    QString dateRangeClause = getDateTimeRange(timeRange);
-
-    QString queryStr = QString(R"(
-        SELECT
-            SUM(CASE WHEN AOIResult = 'OK' THEN 1 ELSE 0 END) as pass_count,
-            SUM(CASE WHEN AOIResult != 'OK' THEN 1 ELSE 0 END) as fail_count,
-            COUNT(*) as total_count
-        FROM ivs_lcd_inspectionresult
-        WHERE %1
-    )").arg(dateRangeClause);
-
-    qDebug() << "Executing Inspection query:" << queryStr;
-
-    QSqlQuery query(m_db);
-    query.setForwardOnly(true);
-
-    if (!query.exec(queryStr)) {
-        qDebug() << "Query failed:" << query.lastError().text();
-        return;
-    }
-
-    int totalInspect = 0;
-    int passCount = 0;
-    int failCount = 0;
-    QMap<QString, int> passByPeriod;
-    QMap<QString, int> failByPeriod;
-
-    if (query.next()) {
-        passCount = query.value(0).toInt();
-        failCount = query.value(1).toInt();
-        totalInspect = query.value(2).toInt();
-
-        passByPeriod["总计"] = passCount;
-        failByPeriod["总计"] = failCount;
-    }
-
-    updateInspectionResultChart(passByPeriod, failByPeriod);
-
-    double passRate = (totalInspect > 0) ? (passCount * 100.0 / totalInspect) : 0;
-    updateStats(totalInspect, passCount, failCount, passRate, 0);
 }
 
 void Defect_Data_Display::updateInspectionResultChart(const QMap<QString, int>& passByPeriod, const QMap<QString, int>& failByPeriod)
@@ -468,10 +543,10 @@ void Defect_Data_Display::updateInspectionResultChart(const QMap<QString, int>& 
         chart->removeAxis(axis);
     }
 
-    QBarSet* passSet = new QBarSet("通过数");
+    QBarSet* passSet = new QBarSet("Pass");
     passSet->setColor(QColor(0, 255, 136));
     passSet->setLabelColor(QColor(234, 234, 234));
-    QBarSet* failSet = new QBarSet("失败数");
+    QBarSet* failSet = new QBarSet("Fail");
     failSet->setColor(QColor(255, 68, 68));
     failSet->setLabelColor(QColor(234, 234, 234));
 
@@ -485,7 +560,7 @@ void Defect_Data_Display::updateInspectionResultChart(const QMap<QString, int>& 
     series->append(failSet);
 
     chart->addSeries(series);
-    chart->setTitle("检测结果统计");
+    chart->setTitle("Inspection Results");
 
     QBarCategoryAxis* axisX = new QBarCategoryAxis();
     axisX->append(QStringList() << "");
@@ -493,7 +568,7 @@ void Defect_Data_Display::updateInspectionResultChart(const QMap<QString, int>& 
     chart->addAxis(axisX, Qt::AlignBottom);
 
     QValueAxis* axisY = new QValueAxis();
-    axisY->setTitleText("数量");
+    axisY->setTitleText("Count");
     axisY->setLabelFormat("%d");
     axisY->setLabelsColor(QColor(234, 234, 234));
     axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -501,47 +576,6 @@ void Defect_Data_Display::updateInspectionResultChart(const QMap<QString, int>& 
 
     series->attachAxis(axisX);
     series->attachAxis(axisY);
-}
-
-void Defect_Data_Display::loadPlatformStats(const QString& timeRange)
-{
-    if (!m_db.isOpen() || !m_db.isValid()) {
-        return;
-    }
-
-    QString dateRangeClause = getDateTimeRange(timeRange);
-
-    QString queryStr = QString(R"(
-        SELECT
-            PlatformID,
-            SUM(CASE WHEN AOIResult = 'OK' THEN 1 ELSE 0 END) as pass_count,
-            SUM(CASE WHEN AOIResult != 'OK' THEN 1 ELSE 0 END) as fail_count
-        FROM ivs_lcd_inspectionresult
-        WHERE %1
-        GROUP BY PlatformID
-        ORDER BY PlatformID
-    )").arg(dateRangeClause);
-
-    qDebug() << "Executing Platform query:" << queryStr;
-
-    QSqlQuery query(m_db);
-    query.setForwardOnly(true);
-
-    if (!query.exec(queryStr)) {
-        qDebug() << "Platform query failed:" << query.lastError().text();
-        return;
-    }
-
-    QMap<int, QPair<int, int>> platformStats;
-
-    while (query.next()) {
-        int platformId = query.value(0).toInt();
-        int passCount = query.value(1).toInt();
-        int failCount = query.value(2).toInt();
-        platformStats[platformId] = qMakePair(passCount, failCount);
-    }
-
-    updatePlatformChart(platformStats);
 }
 
 void Defect_Data_Display::updatePlatformChart(const QMap<int, QPair<int, int>>& platformStats)
@@ -558,17 +592,17 @@ void Defect_Data_Display::updatePlatformChart(const QMap<int, QPair<int, int>>& 
     }
 
     QStringList categories;
-    QBarSet* passSet = new QBarSet("通过数");
+    QBarSet* passSet = new QBarSet("Pass");
     passSet->setColor(QColor(0, 255, 136));
     passSet->setLabelColor(QColor(234, 234, 234));
 
-    QBarSet* failSet = new QBarSet("失败数");
+    QBarSet* failSet = new QBarSet("Fail");
     failSet->setColor(QColor(255, 68, 68));
     failSet->setLabelColor(QColor(234, 234, 234));
 
     QMap<int, QPair<int, int>>::const_iterator it;
     for (it = platformStats.constBegin(); it != platformStats.constEnd(); ++it) {
-        categories.append(QString("工位 %1").arg(it.key()));
+        categories.append(QString("P%1").arg(it.key()));
         *passSet << it.value().first;
         *failSet << it.value().second;
     }
@@ -578,7 +612,7 @@ void Defect_Data_Display::updatePlatformChart(const QMap<int, QPair<int, int>>& 
     series->append(failSet);
 
     chart->addSeries(series);
-    chart->setTitle("各工位检测统计");
+    chart->setTitle("Platform Stats");
 
     QBarCategoryAxis* axisX = new QBarCategoryAxis();
     axisX->append(categories);
@@ -586,7 +620,7 @@ void Defect_Data_Display::updatePlatformChart(const QMap<int, QPair<int, int>>& 
     chart->addAxis(axisX, Qt::AlignBottom);
 
     QValueAxis* axisY = new QValueAxis();
-    axisY->setTitleText("数量");
+    axisY->setTitleText("Count");
     axisY->setLabelFormat("%d");
     axisY->setLabelsColor(QColor(234, 234, 234));
     axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -594,53 +628,6 @@ void Defect_Data_Display::updatePlatformChart(const QMap<int, QPair<int, int>>& 
 
     series->attachAxis(axisX);
     series->attachAxis(axisY);
-}
-
-void Defect_Data_Display::loadDefectMapping(const QString& timeRange)
-{
-    if (!m_db.isOpen() || !m_db.isValid()) {
-        m_db.close();
-        if (!m_db.open() || !m_db.isOpen()) {
-            qDebug() << "Database not open";
-            return;
-        }
-    }
-
-    QString dateRangeClause = getDateTimeRange(timeRange);
-
-    QString queryStr = QString(R"(
-        SELECT
-            Pos_x, Pos_y, Type
-        FROM ivs_lcd_aoidefect
-        WHERE %1
-        ORDER BY StartTime DESC
-        LIMIT 5000
-    )").arg(dateRangeClause);
-
-    qDebug() << "Executing Defect Mapping query:" << queryStr;
-
-    QSqlQuery query(m_db);
-    query.setForwardOnly(true);
-
-    if (!query.exec(queryStr)) {
-        qDebug() << "Defect Mapping query failed:" << query.lastError().text();
-        return;
-    }
-
-    QList<QPair<int, int>> positions;
-    QStringList types;
-
-    while (query.next()) {
-        int posX = query.value(0).toInt();
-        int posY = query.value(1).toInt();
-        QString type = query.value(2).toString();
-
-        positions.append(qMakePair(posX, posY));
-        types.append(type);
-    }
-
-    qDebug() << "Loaded" << positions.size() << "defect positions";
-    updateDefectMappingChart(positions, types);
 }
 
 void Defect_Data_Display::updateDefectMappingChart(const QList<QPair<int, int>>& defectPositions, const QStringList& defectTypes)
@@ -668,7 +655,8 @@ void Defect_Data_Display::updateDefectMappingChart(const QList<QPair<int, int>>&
 
     QMap<QString, QScatterSeries*> seriesMap;
 
-    for (int i = 0; i < defectPositions.size() && i < 5000; ++i) {
+    int maxPoints = qMin(defectPositions.size(), 5000);
+    for (int i = 0; i < maxPoints; ++i) {
         QString type = defectTypes.value(i, "Other");
         if (!seriesMap.contains(type)) {
             QScatterSeries* series = new QScatterSeries();
@@ -680,13 +668,11 @@ void Defect_Data_Display::updateDefectMappingChart(const QList<QPair<int, int>>&
         seriesMap[type]->append(defectPositions[i].first, defectPositions[i].second);
     }
 
-    qDebug() << "Created" << seriesMap.size() << "scatter series";
-
     for (auto series : seriesMap.values()) {
         chart->addSeries(series);
     }
 
-    chart->setTitle("缺陷位置分布 (散点图)");
+    chart->setTitle("Defect Position Map");
 
     double minX = 0, maxX = 0, minY = 0, maxY = 0;
     if (!defectPositions.isEmpty()) {
@@ -702,30 +688,69 @@ void Defect_Data_Display::updateDefectMappingChart(const QList<QPair<int, int>>&
         }
     }
 
-    qDebug() << "X range:" << minX << "-" << maxX << "Y range:" << minY << "-" << maxY;
-
     QValueAxis* axisX = new QValueAxis();
-    axisX->setTitleText("X 坐标");
-    axisX->setLabelFormat("%d");
+    axisX->setTitleText("X");
+    axisX->setRange(minX - 50, maxX + 50);
     axisX->setLabelsColor(QColor(234, 234, 234));
     axisX->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    axisX->setRange(minX - 10, maxX + 10);
     chart->addAxis(axisX, Qt::AlignBottom);
 
     QValueAxis* axisY = new QValueAxis();
-    axisY->setTitleText("Y 坐标");
-    axisY->setLabelFormat("%d");
+    axisY->setTitleText("Y");
+    axisY->setRange(minY - 50, maxY + 50);
     axisY->setLabelsColor(QColor(234, 234, 234));
     axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    axisY->setRange(minY - 10, maxY + 10);
     chart->addAxis(axisY, Qt::AlignLeft);
 
     for (auto series : seriesMap.values()) {
         series->attachAxis(axisX);
         series->attachAxis(axisY);
     }
+}
 
-    qDebug() << "Chart update complete";
+void Defect_Data_Display::loadDefectMapping(const QString& timeRange)
+{
+    if (!m_db.isOpen() || !m_db.isValid()) {
+        m_db.close();
+        if (!m_db.open() || !m_db.isOpen()) {
+            qDebug() << "Database not open";
+            return;
+        }
+    }
+
+    QString dateRangeClause = getDateTimeRange(timeRange);
+
+    QString queryStr = QString(R"(
+        SELECT Pos_x, Pos_y, Type
+        FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+        WHERE %1
+        ORDER BY StartTime DESC
+    )").arg(dateRangeClause);
+
+    qDebug() << "Executing Defect Mapping query:" << queryStr;
+
+    QSqlQuery query(m_db);
+    query.setForwardOnly(true);
+    query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
+
+    if (!query.exec(queryStr)) {
+        qDebug() << "Defect Mapping query failed:" << query.lastError().text();
+        return;
+    }
+
+    QList<QPair<int, int>> positions;
+    QStringList types;
+
+    while (query.next()) {
+        int posX = query.value(0).toInt();
+        int posY = query.value(1).toInt();
+        QString type = query.value(2).toString();
+
+        positions.append(qMakePair(posX, posY));
+        types.append(type);
+    }
+
+    updateDefectMappingChart(positions, types);
 }
 
 void Defect_Data_Display::loadTrendData(const QString& timeRange)
@@ -741,22 +766,33 @@ void Defect_Data_Display::loadTrendData(const QString& timeRange)
     QString dateRangeClause = getDateTimeRange(timeRange);
     QString timeFormat = getTimeFilterClause(timeRange);
 
-    QString queryStr = QString(R"(
-        SELECT
-            %1 as time_period,
-            COUNT(*) as defect_count
-        FROM ivs_lcd_aoidefect
-        WHERE %2
-        GROUP BY time_period
-        ORDER BY time_period
-    )").arg(timeFormat).arg(dateRangeClause);
+    qDebug() << "Executing optimized trend query...";
 
-    qDebug() << "Executing Trend query:" << queryStr;
+    QString combinedTrendQuery = QString(R"(
+        SELECT
+            defect_counts.time_period,
+            COALESCE(defect_counts.defect_count, 0) as defect_count,
+            COALESCE(total_counts.total_count, 0) as total_count
+        FROM (
+            SELECT %1 as time_period, COUNT(*) as defect_count
+            FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+            WHERE %2
+            GROUP BY time_period
+        ) defect_counts
+        LEFT JOIN (
+            SELECT %1 as time_period, COUNT(*) as total_count
+            FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+            WHERE %2
+            GROUP BY time_period
+        ) total_counts ON defect_counts.time_period = total_counts.time_period
+        ORDER BY defect_counts.time_period
+    )").arg(timeFormat).arg(dateRangeClause);
 
     QSqlQuery query(m_db);
     query.setForwardOnly(true);
+    query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
 
-    if (!query.exec(queryStr)) {
+    if (!query.exec(combinedTrendQuery)) {
         qDebug() << "Trend query failed:" << query.lastError().text();
         return;
     }
@@ -764,60 +800,17 @@ void Defect_Data_Display::loadTrendData(const QString& timeRange)
     QMap<QString, QPair<int, int>> trendData;
     QMap<QString, double> defectRates;
 
-    QString inspectionQueryStr;
-    if (timeRange == "按小时") {
-        inspectionQueryStr = QString(R"(
-            SELECT
-                DATE_FORMAT(StartTime, '%Y-%m-%d %H:00') as time_period,
-                COUNT(*) as total_count
-            FROM ivs_lcd_inspectionresult
-            WHERE %1
-            GROUP BY time_period
-            ORDER BY time_period
-        )").arg(dateRangeClause);
-    } else if (timeRange == "按天") {
-        inspectionQueryStr = QString(R"(
-            SELECT
-                DATE_FORMAT(StartTime, '%Y-%m-%d') as time_period,
-                COUNT(*) as total_count
-            FROM ivs_lcd_inspectionresult
-            WHERE %1
-            GROUP BY time_period
-            ORDER BY time_period
-        )").arg(dateRangeClause);
-    } else {
-        inspectionQueryStr = QString(R"(
-            SELECT
-                DATE_FORMAT(StartTime, '%Y-%m') as time_period,
-                COUNT(*) as total_count
-            FROM ivs_lcd_inspectionresult
-            WHERE %1
-            GROUP BY time_period
-            ORDER BY time_period
-        )").arg(dateRangeClause);
-    }
-
-    QSqlQuery inspQuery(m_db);
-    inspQuery.setForwardOnly(true);
-    inspQuery.exec(inspectionQueryStr);
-
-    QMap<QString, int> totalCounts;
-    while (inspQuery.next()) {
-        QString period = inspQuery.value(0).toString();
-        int count = inspQuery.value(1).toInt();
-        totalCounts[period] = count;
-    }
-
     while (query.next()) {
         QString period = query.value(0).toString();
         int defectCount = query.value(1).toInt();
-        int totalCount = totalCounts.value(period, 1);
+        int totalCount = query.value(2).toInt();
         double rate = (totalCount > 0) ? (defectCount * 100.0 / totalCount) : 0;
 
         trendData[period] = qMakePair(defectCount, totalCount);
         defectRates[period] = rate;
     }
 
+    qDebug() << "Trend query completed, periods:" << trendData.size();
     updateTrendChart(trendData, defectRates);
 }
 
@@ -845,7 +838,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     }
 
     QLineSeries* defectSeries = new QLineSeries();
-    defectSeries->setName("缺陷数量");
+    defectSeries->setName("Defect Count");
     defectSeries->setColor(QColor(255, 100, 100));
 
     QStringList categories;
@@ -856,7 +849,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     }
 
     chartTrend->addSeries(defectSeries);
-    chartTrend->setTitle("缺陷数量趋势");
+    chartTrend->setTitle("Defect Count Trend");
 
     QBarCategoryAxis* axisXTrend = new QBarCategoryAxis();
     axisXTrend->append(categories);
@@ -864,7 +857,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     chartTrend->addAxis(axisXTrend, Qt::AlignBottom);
 
     QValueAxis* axisYTrend = new QValueAxis();
-    axisYTrend->setTitleText("缺陷数量");
+    axisYTrend->setTitleText("Defect Count");
     axisYTrend->setLabelFormat("%d");
     axisYTrend->setLabelsColor(QColor(234, 234, 234));
     axisYTrend->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -874,7 +867,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     defectSeries->attachAxis(axisYTrend);
 
     QLineSeries* rateSeries = new QLineSeries();
-    rateSeries->setName("缺陷率 (%)");
+    rateSeries->setName("Defect Rate (%)");
     rateSeries->setColor(QColor(0, 217, 255));
 
     index = 0;
@@ -883,7 +876,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     }
 
     chartRate->addSeries(rateSeries);
-    chartRate->setTitle("缺陷率趋势");
+    chartRate->setTitle("Defect Rate Trend");
 
     QBarCategoryAxis* axisXRate = new QBarCategoryAxis();
     QStringList rateCategories;
@@ -895,7 +888,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     chartRate->addAxis(axisXRate, Qt::AlignBottom);
 
     QValueAxis* axisYRate = new QValueAxis();
-    axisYRate->setTitleText("缺陷率 (%)");
+    axisYRate->setTitleText("Defect Rate (%)");
     axisYRate->setLabelFormat("%.2f");
     axisYRate->setLabelsColor(QColor(234, 234, 234));
     axisYRate->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -904,8 +897,6 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
 
     rateSeries->attachAxis(axisXRate);
     rateSeries->attachAxis(axisYRate);
-
-    qDebug() << "Trend charts updated";
 }
 
 void Defect_Data_Display::loadDetailData(const QString& timeRange)
@@ -921,18 +912,17 @@ void Defect_Data_Display::loadDetailData(const QString& timeRange)
     QString dateRangeClause = getDateTimeRange(timeRange);
 
     QString queryStr = QString(R"(
-        SELECT
-            StartTime, Type, Pos_x, Pos_y
-        FROM ivs_lcd_aoidefect
+        SELECT StartTime, Type, Pos_x, Pos_y
+        FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
         WHERE %1
         ORDER BY StartTime DESC
-        LIMIT 200
     )").arg(dateRangeClause);
 
     qDebug() << "Executing Detail query:" << queryStr;
 
     QSqlQuery query(m_db);
     query.setForwardOnly(true);
+    query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
 
     if (!query.exec(queryStr)) {
         qDebug() << "Detail query failed:" << query.lastError().text();
@@ -983,26 +973,362 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
         itemY->setTextAlignment(Qt::AlignCenter);
         ui.tableDefects->setItem(i, 4, itemY);
     }
-
-    qDebug() << "Detail table updated";
 }
 
-void Defect_Data_Display::onRefreshClicked()
+DataLoaderThread::DataLoaderThread(int loadId, const QString& timeRange, const QString& dateRange, QObject* parent)
+    : QThread(parent)
+    , m_loadId(loadId)
+    , m_timeRange(timeRange)
+    , m_dateRange(dateRange)
 {
-    QString timeRange = ui.comboTimeRange->currentText();
-    ui.labelStatus->setText("状态: 加载中...");
-    ui.labelStatus->setStyleSheet("color: #ffaa00;");
-
-    loadAoiDefectData(timeRange);
-    loadInspectionResultData(timeRange);
-    loadPlatformStats(timeRange);
-
-    ui.labelStatus->setText("状态: 已更新 " + QDateTime::currentDateTime().toString("HH:mm:ss"));
-    ui.labelStatus->setStyleSheet("color: #00ff88;");
 }
 
-void Defect_Data_Display::onTimeRangeChanged(int index)
+void DataLoaderThread::run()
 {
-    Q_UNUSED(index);
-    onRefreshClicked();
+    qDebug() << "=== Worker thread started ===";
+
+    QString connectionString = "DRIVER={MySQL ODBC 5.3 ANSI Driver};"
+                              "SERVER=localhost;"
+                              "PORT=3306;"
+                              "DATABASE=ivs_lcd;"
+                              "UID=root;"
+                              "PWD=123456;"
+                              "OPTION=8;";
+
+    qDebug() << "Creating database connection...";
+    QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", "worker_connection");
+    db.setDatabaseName(connectionString);
+    db.setConnectOptions("SQL_ATTR_CONNECTION_TIMEOUT=30000;SQL_ATTR_QUERY_TIMEOUT=30000");
+
+    if (!db.open()) {
+        qDebug() << "Worker thread: database connection failed:" << db.lastError().text();
+        return;
+    }
+
+    qDebug() << "Worker thread: database connected";
+    qDebug() << "Time range:" << m_timeRange;
+    qDebug() << "Date range:" << m_dateRange;
+
+    qDebug() << "Executing combined optimized query...";
+
+    QString combinedQueryStr = QString(R"(
+        SELECT 'aoi' as query_type, Type as defect_type, COUNT(*) as cnt, 0 as platform_id, 0 as pass_cnt, 0 as fail_cnt
+        FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+        WHERE %1
+        GROUP BY Type
+        UNION ALL
+        SELECT 'insp_total', '', COUNT(*), 0, SUM(IF(AOIResult = 'OK', 1, 0)), SUM(IF(AOIResult != 'OK', 1, 0))
+        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        WHERE %1
+        UNION ALL
+        SELECT 'insp_platform', '', PlatformID, PlatformID, SUM(IF(AOIResult = 'OK', 1, 0)), SUM(IF(AOIResult != 'OK', 1, 0))
+        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        WHERE %1
+        GROUP BY PlatformID
+    )").arg(m_dateRange);
+
+    QSqlQuery combinedQuery(db);
+    combinedQuery.setForwardOnly(true);
+    combinedQuery.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
+
+    if (!combinedQuery.exec(combinedQueryStr)) {
+        qDebug() << "Combined query failed:" << combinedQuery.lastError().text();
+        db.close();
+        QSqlDatabase::removeDatabase("worker_connection");
+        emit finished(m_loadId);
+        return;
+    }
+
+    QMap<QString, QList<QPair<QString, int>>> defectByType;
+    QMap<QString, int> passByPeriod;
+    QMap<QString, int> failByPeriod;
+    QMap<int, QPair<int, int>> platformStats;
+    int totalDefects = 0;
+    int totalInspect = 0, passCount = 0, failCount = 0;
+
+    while (combinedQuery.next()) {
+        QString queryType = combinedQuery.value(0).toString();
+        QString defectType = combinedQuery.value(1).toString();
+        int cnt = combinedQuery.value(2).toInt();
+        int platformId = combinedQuery.value(3).toInt();
+        int passCnt = combinedQuery.value(4).toInt();
+        int failCnt = combinedQuery.value(5).toInt();
+
+        if (queryType == "aoi") {
+            totalDefects += cnt;
+            defectByType[defectType].append(qMakePair("All", cnt));
+        } else if (queryType == "insp_total") {
+            totalInspect = cnt;
+            passCount = passCnt;
+            failCount = failCnt;
+            passByPeriod["Total"] = passCount;
+            failByPeriod["Total"] = failCount;
+        } else if (queryType == "insp_platform") {
+            platformStats[platformId] = qMakePair(passCnt, failCnt);
+        }
+    }
+
+    qDebug() << "Combined query results - AOI types:" << defectByType.size()
+             << "defects:" << totalDefects << "inspect:" << totalInspect
+             << "pass:" << passCount << "fail:" << failCount;
+
+    double passRate = (totalInspect > 0) ? (passCount * 100.0 / totalInspect) : 0;
+
+    emit aoiDataLoaded(defectByType, totalDefects);
+    emit inspectionDataLoaded(passByPeriod, failByPeriod, totalInspect, passCount, failCount, passRate);
+    emit platformDataLoaded(platformStats);
+
+    db.close();
+    QSqlDatabase::removeDatabase("worker_connection");
+
+    qDebug() << "Worker thread: all queries completed";
+    emit finished(m_loadId);
+}
+
+bool Defect_Data_Display::isCacheValid(CachedTabData* cache, const QString& timeRange, const QDate& date)
+{
+    if (cache->timeRange.isEmpty() || cache->date != date) {
+        return false;
+    }
+    if (cache->timeRange != timeRange) {
+        return false;
+    }
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (now - cache->timestamp > 60000) {
+        return false;
+    }
+    return true;
+}
+
+void Defect_Data_Display::loadDefectMappingAsync(const QString& timeRange)
+{
+    if (m_isTabLoading) {
+        if (m_tabWorkerThread) {
+            m_tabWorkerThread->quit();
+            m_tabWorkerThread->wait(50);
+        }
+    }
+
+    ++m_currentLoadId;
+    int thisLoadId = m_currentLoadId;
+
+    m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 3, timeRange,
+        getDateTimeRange(timeRange), m_selectedDate, this);
+
+    connect(m_tabWorkerThread, &TabDataLoaderThread::defectMappingDataLoaded,
+            this, &Defect_Data_Display::onDataLoaded_DefectMapping, Qt::QueuedConnection);
+    connect(m_tabWorkerThread, &TabDataLoaderThread::finished,
+            this, [this](int loadId, int tabIndex) {
+                if (loadId == m_currentLoadId) {
+                    m_isTabLoading = false;
+                    qDebug() << "Tab" << tabIndex << "load finished";
+                }
+            }, Qt::QueuedConnection);
+
+    m_isTabLoading = true;
+    m_tabWorkerThread->start();
+}
+
+void Defect_Data_Display::loadTrendDataAsync(const QString& timeRange)
+{
+    if (m_isTabLoading) {
+        if (m_tabWorkerThread) {
+            m_tabWorkerThread->quit();
+            m_tabWorkerThread->wait(50);
+        }
+    }
+
+    ++m_currentLoadId;
+    int thisLoadId = m_currentLoadId;
+
+    m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 4, timeRange,
+        getDateTimeRange(timeRange), m_selectedDate, this);
+
+    connect(m_tabWorkerThread, &TabDataLoaderThread::trendDataLoaded,
+            this, &Defect_Data_Display::onDataLoaded_Trend, Qt::QueuedConnection);
+    connect(m_tabWorkerThread, &TabDataLoaderThread::finished,
+            this, [this](int loadId, int tabIndex) {
+                if (loadId == m_currentLoadId) {
+                    m_isTabLoading = false;
+                    qDebug() << "Tab" << tabIndex << "load finished";
+                }
+            }, Qt::QueuedConnection);
+
+    m_isTabLoading = true;
+    m_tabWorkerThread->start();
+}
+
+void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
+{
+    if (m_isTabLoading) {
+        if (m_tabWorkerThread) {
+            m_tabWorkerThread->quit();
+            m_tabWorkerThread->wait(50);
+        }
+    }
+
+    ++m_currentLoadId;
+    int thisLoadId = m_currentLoadId;
+
+    m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 5, timeRange,
+        getDateTimeRange(timeRange), m_selectedDate, this);
+
+    connect(m_tabWorkerThread, &TabDataLoaderThread::detailDataLoaded,
+            this, &Defect_Data_Display::onDataLoaded_Detail, Qt::QueuedConnection);
+    connect(m_tabWorkerThread, &TabDataLoaderThread::finished,
+            this, [this](int loadId, int tabIndex) {
+                if (loadId == m_currentLoadId) {
+                    m_isTabLoading = false;
+                    qDebug() << "Tab" << tabIndex << "load finished";
+                }
+            }, Qt::QueuedConnection);
+
+    m_isTabLoading = true;
+    m_tabWorkerThread->start();
+}
+
+TabDataLoaderThread::TabDataLoaderThread(int loadId, int tabIndex, const QString& timeRange,
+                                       const QString& dateRange, const QDate& date, QObject* parent)
+    : QThread(parent)
+    , m_loadId(loadId)
+    , m_tabIndex(tabIndex)
+    , m_timeRange(timeRange)
+    , m_dateRange(dateRange)
+    , m_date(date)
+{
+}
+
+void TabDataLoaderThread::run()
+{
+    qDebug() << "=== Tab worker thread started ===" << m_tabIndex;
+
+    QString connectionString = "DRIVER={MySQL ODBC 5.3 ANSI Driver};"
+                              "SERVER=localhost;"
+                              "PORT=3306;"
+                              "DATABASE=ivs_lcd;"
+                              "UID=root;"
+                              "PWD=123456;"
+                              "OPTION=8;";
+
+    QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", "tab_worker_connection");
+    db.setDatabaseName(connectionString);
+    db.setConnectOptions("SQL_ATTR_CONNECTION_TIMEOUT=30000;SQL_ATTR_QUERY_TIMEOUT=30000");
+
+    if (!db.open()) {
+        qDebug() << "Tab worker: database connection failed:" << db.lastError().text();
+        emit finished(m_loadId, m_tabIndex);
+        return;
+    }
+
+    if (m_tabIndex == 3) {
+        QString queryStr = QString(R"(
+            SELECT Pos_x, Pos_y, Type
+            FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+            WHERE %1
+            ORDER BY StartTime DESC
+        )").arg(m_dateRange);
+
+        QSqlQuery query(db);
+        query.setForwardOnly(true);
+        query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
+
+        if (query.exec(queryStr)) {
+            QList<QPair<int, int>> positions;
+            QStringList types;
+
+            while (query.next()) {
+                positions.append(qMakePair(query.value(0).toInt(), query.value(1).toInt()));
+                types.append(query.value(2).toString());
+            }
+            emit defectMappingDataLoaded(positions, types);
+        } else {
+            qDebug() << "Defect mapping query failed:" << query.lastError().text();
+        }
+    }
+    else if (m_tabIndex == 4) {
+        QString timeFormat;
+        if (m_timeRange == "按小时") {
+            timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
+        } else if (m_timeRange == "按天") {
+            timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d')";
+        } else {
+            timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
+        }
+
+        QString combinedTrendQuery = QString(R"(
+            SELECT
+                defect_counts.time_period,
+                COALESCE(defect_counts.defect_count, 0) as defect_count,
+                COALESCE(total_counts.total_count, 0) as total_count
+            FROM (
+                SELECT %1 as time_period, COUNT(*) as defect_count
+                FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+                WHERE %2
+                GROUP BY time_period
+            ) defect_counts
+            LEFT JOIN (
+                SELECT %1 as time_period, COUNT(*) as total_count
+                FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+                WHERE %2
+                GROUP BY time_period
+            ) total_counts ON defect_counts.time_period = total_counts.time_period
+            ORDER BY defect_counts.time_period
+        )").arg(timeFormat).arg(m_dateRange);
+
+        QSqlQuery query(db);
+        query.setForwardOnly(true);
+        query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
+
+        if (query.exec(combinedTrendQuery)) {
+            QMap<QString, QPair<int, int>> trendData;
+            QMap<QString, double> defectRates;
+
+            while (query.next()) {
+                QString period = query.value(0).toString();
+                int defectCount = query.value(1).toInt();
+                int totalCount = query.value(2).toInt();
+                double rate = (totalCount > 0) ? (defectCount * 100.0 / totalCount) : 0;
+
+                trendData[period] = qMakePair(defectCount, totalCount);
+                defectRates[period] = rate;
+            }
+            emit trendDataLoaded(trendData, defectRates);
+        } else {
+            qDebug() << "Trend query failed:" << query.lastError().text();
+        }
+    }
+    else if (m_tabIndex == 5) {
+        QString queryStr = QString(R"(
+            SELECT StartTime, Type, Pos_x, Pos_y
+            FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+            WHERE %1
+            ORDER BY StartTime DESC
+        )").arg(m_dateRange);
+
+        QSqlQuery query(db);
+        query.setForwardOnly(true);
+        query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
+
+        if (query.exec(queryStr)) {
+            QList<QVariantList> defectDetails;
+
+            while (query.next()) {
+                QVariantList row;
+                row.append(query.value(0).toString());
+                row.append(query.value(1).toString());
+                row.append(query.value(2).toInt());
+                row.append(query.value(3).toInt());
+                defectDetails.append(row);
+            }
+            emit detailDataLoaded(defectDetails);
+        } else {
+            qDebug() << "Detail query failed:" << query.lastError().text();
+        }
+    }
+
+    db.close();
+    QSqlDatabase::removeDatabase("tab_worker_connection");
+
+    qDebug() << "Tab worker thread finished" << m_tabIndex;
+    emit finished(m_loadId, m_tabIndex);
 }
