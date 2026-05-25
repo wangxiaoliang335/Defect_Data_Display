@@ -463,6 +463,9 @@ void Defect_Data_Display::onRefreshClicked()
     qDebug() << "Starting worker thread...";
     m_workerThread->start();
     qDebug() << "Worker thread started";
+
+    // Also load detail data for the detail tab
+    loadDetailDataAsync(timeRange);
 }
 
 void Defect_Data_Display::clearAllCharts()
@@ -1035,10 +1038,11 @@ void Defect_Data_Display::loadDetailData(const QString& timeRange)
     QString dateRangeClause = getDateTimeRange(timeRange);
 
     QString queryStr = QString(R"(
-        SELECT StartTime, Type, Pos_x, Pos_y
-        FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+        SELECT Code_AOI, Grade_AOI, COUNT(*) as cnt
+        FROM ivs_lcd_inspectionresult
         WHERE %1
-        ORDER BY StartTime DESC
+        GROUP BY Code_AOI, Grade_AOI
+        ORDER BY Code_AOI, Grade_AOI
     )").arg(dateRangeClause);
 
     qDebug() << "Executing Detail query:" << queryStr;
@@ -1056,10 +1060,9 @@ void Defect_Data_Display::loadDetailData(const QString& timeRange)
 
     while (query.next()) {
         QVariantList row;
-        row.append(query.value(0).toString());
-        row.append(query.value(1).toString());
-        row.append(query.value(2).toInt());
-        row.append(query.value(3).toInt());
+        row.append(query.value(0).toString());  // Code_AOI
+        row.append(query.value(1).toString());  // Grade_AOI
+        row.append(query.value(2).toInt());    // count
         defectDetails.append(row);
     }
 
@@ -1070,32 +1073,83 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
 {
     qDebug() << "updateDetailTable called with" << defectDetails.size() << "records";
 
-    ui.tableDefects->clearContents();
-    ui.tableDefects->setRowCount(defectDetails.size());
-
-    for (int i = 0; i < defectDetails.size(); ++i) {
-        const QVariantList& row = defectDetails[i];
-
-        QTableWidgetItem* itemIndex = new QTableWidgetItem(QString::number(i + 1));
-        itemIndex->setTextAlignment(Qt::AlignCenter);
-        ui.tableDefects->setItem(i, 0, itemIndex);
-
-        QTableWidgetItem* itemTime = new QTableWidgetItem(row[0].toString());
-        itemTime->setTextAlignment(Qt::AlignCenter);
-        ui.tableDefects->setItem(i, 1, itemTime);
-
-        QTableWidgetItem* itemType = new QTableWidgetItem(row[1].toString());
-        itemType->setTextAlignment(Qt::AlignCenter);
-        ui.tableDefects->setItem(i, 2, itemType);
-
-        QTableWidgetItem* itemX = new QTableWidgetItem(QString::number(row[2].toInt()));
-        itemX->setTextAlignment(Qt::AlignCenter);
-        ui.tableDefects->setItem(i, 3, itemX);
-
-        QTableWidgetItem* itemY = new QTableWidgetItem(QString::number(row[3].toInt()));
-        itemY->setTextAlignment(Qt::AlignCenter);
-        ui.tableDefects->setItem(i, 4, itemY);
+    // Count by Code_AOI (row[0]) using actual count from row[2]
+    QMap<QString, int> defectCountByType;
+    for (const QVariantList& row : defectDetails) {
+        QString codeAoi = row[0].toString();
+        int cnt = row[2].toInt();
+        defectCountByType[codeAoi] = defectCountByType.value(codeAoi, 0) + cnt;
     }
+
+    // Create bar series
+    QBarSeries* series = new QBarSeries();
+    series->setLabelsVisible(true);
+    series->setLabelsFormat("@value");
+    series->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
+    QBarSet* set = new QBarSet("Count");
+    set->setColor(QColor(0, 217, 255));
+
+    QStringList categories;
+    for (auto it = defectCountByType.constBegin(); it != defectCountByType.constEnd(); ++it) {
+        categories.append(it.key());
+        *set << it.value();
+    }
+
+    series->append(set);
+
+    // Create or update chart
+    QChart* chart;
+    if (m_chartViewDetail) {
+        chart = ((QChartView*)m_chartViewDetail)->chart();
+        chart->removeAllSeries();
+        for (auto axis : chart->axes()) {
+            chart->removeAxis(axis);
+        }
+    } else {
+        chart = new QChart();
+        chart->setTitle("Code_AOI Distribution");
+        chart->setAnimationOptions(QChart::NoAnimation);
+        chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+        chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
+        chart->legend()->setLabelColor(QColor(234, 234, 234));
+        chart->legend()->hide();
+
+        m_chartViewDetail = new QChartView(chart);
+        ((QChartView*)m_chartViewDetail)->setRenderHint(QPainter::Antialiasing);
+        ((QChartView*)m_chartViewDetail)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+
+        QVBoxLayout* layout = new QVBoxLayout(ui.chartDetail);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->addWidget((QChartView*)m_chartViewDetail);
+    }
+
+    chart->addSeries(series);
+
+    QBarCategoryAxis* axisX = new QBarCategoryAxis();
+    axisX->append(categories);
+    axisX->setLabelsColor(QColor(234, 234, 234));
+    QFont axisXFont = axisX->labelsFont();
+    axisXFont.setPointSize(10);
+    axisX->setLabelsFont(axisXFont);
+    chart->addAxis(axisX, Qt::AlignBottom);
+
+    QValueAxis* axisY = new QValueAxis();
+    axisY->setTitleText("Count");
+    axisY->setLabelFormat("%d");
+    axisY->setLabelsColor(QColor(234, 234, 234));
+    QFont axisYFont = axisY->labelsFont();
+    axisYFont.setPointSize(10);
+    axisY->setLabelsFont(axisYFont);
+    // Set minimum to 0 and add top padding for labels
+    int maxVal = 1;
+    for (auto it = defectCountByType.constBegin(); it != defectCountByType.constEnd(); ++it) {
+        if (it.value() > maxVal) maxVal = it.value();
+    }
+    axisY->setRange(0, maxVal + maxVal * 0.2);  // Add 20% top padding for labels
+    chart->addAxis(axisY, Qt::AlignLeft);
+
+    series->attachAxis(axisX);
+    series->attachAxis(axisY);
 }
 
 void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData)
@@ -1860,10 +1914,11 @@ void TabDataLoaderThread::run()
     }
     else if (m_tabIndex == 5) {
         QString queryStr = QString(R"(
-            SELECT StartTime, Type, Pos_x, Pos_y
-            FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+            SELECT Code_AOI, Grade_AOI, COUNT(*) as cnt
+            FROM ivs_lcd_inspectionresult
             WHERE %1
-            ORDER BY StartTime DESC
+            GROUP BY Code_AOI, Grade_AOI
+            ORDER BY Code_AOI, Grade_AOI
         )").arg(m_dateRange);
 
         QSqlQuery query(db);

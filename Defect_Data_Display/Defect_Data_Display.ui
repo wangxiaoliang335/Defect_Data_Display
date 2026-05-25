@@ -711,7 +711,7 @@ QWidget#centralWidget {
        </attribute>
        <layout class="QVBoxLayout" name="tabDetailLayout">
         <item>
-        <widget class="QTableWidget" name="tableDefects">
+        <widget class="QFrame" name="chartDetail">
          <property name="minimumSize">
           <size>
            <width>0</width>
@@ -720,55 +720,13 @@ QWidget#centralWidget {
          </property>
          <property name="styleSheet">
           <string>
-QTableWidget {
+QFrame {
     background-color: #16213e;
-    color: #eaeaea;
-    gridline-color: #0f3460;
     border: none;
     border-radius: 8px;
 }
-QHeaderView::section {
-    background-color: #0f3460;
-    color: #00d9ff;
-    padding: 8px;
-    border: none;
-}
-QTableWidget::item {
-    padding: 5px;
-}
-QTableWidget::item:selected {
-    background-color: #1a4d7c;
-}
            </string>
           </property>
-          <column>
-           <property name="text">
-            <string>序号</string>
-           </property>
-           <property name="width">
-            <number>60</number>
-           </property>
-          </column>
-          <column>
-           <property name="text">
-            <string>时间</string>
-           </property>
-          </column>
-          <column>
-           <property name="text">
-            <string>缺陷类型</string>
-           </property>
-          </column>
-          <column>
-           <property name="text">
-            <string>X坐标</string>
-           </property>
-          </column>
-          <column>
-           <property name="text">
-            <string>Y坐标</string>
-           </property>
-          </column>
          </widget>
         </item>
        </layout>

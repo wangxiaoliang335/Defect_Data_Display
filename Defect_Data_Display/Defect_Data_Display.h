@@ -88,6 +88,7 @@ private:
     QChartView* m_chartViewPlatform1;
     QChartView* m_chartViewPlatform2;
     QChartView* m_chartViewPlatform3;
+    void* m_chartViewDetail;
     QTimer* m_timer;
     QDate m_selectedDate;
 
