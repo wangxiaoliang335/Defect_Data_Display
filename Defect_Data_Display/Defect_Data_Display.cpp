@@ -136,6 +136,9 @@ void Defect_Data_Display::onDateChanged(const QDate& date)
 {
     qDebug() << "=== onDateChanged called ===" << date.toString();
     m_selectedDate = date;
+
+    // Always refresh main page data when date changes
+    // This will refresh the summary statistics (AOI types, total defects, inspection counts, etc.)
     onRefreshClicked();
 }
 
@@ -404,6 +407,11 @@ bool Defect_Data_Display::connectToDatabase()
 
 void Defect_Data_Display::onRefreshClicked()
 {
+    if (m_isLoading) {
+        qDebug() << "Already loading, skipping";
+        return;
+    }
+
     qDebug() << "=== onRefreshClicked called ===";
     qDebug() << "m_isLoading:" << m_isLoading;
 
@@ -424,9 +432,6 @@ void Defect_Data_Display::onRefreshClicked()
         delete m_workerThread;
         m_workerThread = nullptr;
     }
-
-    // Reset loading state when starting new load
-    m_isLoading = false;
 
     QString timeRange = ui.comboTimeRange->currentText();
     qDebug() << "Time range:" << timeRange;
@@ -463,6 +468,9 @@ void Defect_Data_Display::onRefreshClicked()
     qDebug() << "Starting worker thread...";
     m_workerThread->start();
     qDebug() << "Worker thread started";
+
+    // Also load Tab 4 trend data
+    loadTrendDataAsync(timeRange);
 
     // Also load detail data for the detail tab
     loadDetailDataAsync(timeRange);
@@ -518,6 +526,8 @@ void Defect_Data_Display::clearAllCharts()
 void Defect_Data_Display::onTimeRangeChanged(int index)
 {
     Q_UNUSED(index);
+
+    // Always refresh main page data when time range changes
     onRefreshClicked();
 }
 
@@ -526,13 +536,6 @@ void Defect_Data_Display::onLoadFinished(int loadId)
     qDebug() << "=== onLoadFinished called ===" << "loadId:" << loadId << "currentLoadId:" << m_currentLoadId;
     if (loadId != m_currentLoadId) {
         qDebug() << "Stale load, ignoring";
-        // Check if we should reset loading state anyway
-        // This happens when newer loads have already completed
-        // But we should still re-enable controls
-        ui.btnRefresh->setEnabled(true);
-        ui.comboTimeRange->setEnabled(true);
-        ui.dateEdit->setEnabled(true);
-        return;
     }
     m_isLoading = false;
     ui.btnRefresh->setEnabled(true);
@@ -1018,7 +1021,12 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     axisYRate->setLabelFormat("%.2f");
     axisYRate->setLabelsColor(QColor(234, 234, 234));
     axisYRate->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    axisYRate->setRange(0, 10);
+    // Set Y-axis range dynamically based on max defect rate
+    double maxRate = 10.0;
+    for (auto it = defectRates.constBegin(); it != defectRates.constEnd(); ++it) {
+        if (it.value() > maxRate) maxRate = it.value();
+    }
+    axisYRate->setRange(0, maxRate * 1.1);  // Add 10% padding
     chartRate->addAxis(axisYRate, Qt::AlignLeft);
 
     rateSeries->attachAxis(axisXRate);
@@ -1502,7 +1510,7 @@ void DataLoaderThread::run()
     qDebug() << "Creating database connection...";
     QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", "worker_connection");
     db.setDatabaseName(connectionString);
-    db.setConnectOptions("SQL_ATTR_CONNECTION_TIMEOUT=30000;SQL_ATTR_QUERY_TIMEOUT=30000");
+    db.setConnectOptions("SQL_ATTR_CONNECTION_TIMEOUT=30000");
 
     if (!db.open()) {
         qDebug() << "Worker thread: database connection failed:" << db.lastError().text();
@@ -1827,7 +1835,7 @@ void TabDataLoaderThread::run()
     QString connectionName = QString("tab_worker_connection_%1").arg((quint64)this);
     QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", connectionName);
     db.setDatabaseName(connectionString);
-    db.setConnectOptions("SQL_ATTR_CONNECTION_TIMEOUT=30000;SQL_ATTR_QUERY_TIMEOUT=30000");
+    db.setConnectOptions("SQL_ATTR_CONNECTION_TIMEOUT=30000");
 
     if (!db.open()) {
         qDebug() << "Tab worker: database connection failed:" << db.lastError().text();
@@ -1933,7 +1941,6 @@ void TabDataLoaderThread::run()
                 row.append(query.value(0).toString());
                 row.append(query.value(1).toString());
                 row.append(query.value(2).toInt());
-                row.append(query.value(3).toInt());
                 defectDetails.append(row);
             }
             emit detailDataLoaded(defectDetails);
