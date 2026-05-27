@@ -1170,6 +1170,10 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     QLineSeries* defectSeries = new QLineSeries();
     defectSeries->setName("Defect Count");
     defectSeries->setColor(QColor(255, 100, 100));
+    defectSeries->setPointLabelsVisible(true);
+    defectSeries->setPointLabelsFormat("@yPoint");
+    defectSeries->setPointLabelsColor(QColor(255, 200, 100));
+    defectSeries->setPointLabelsFont(QFont("Arial", 9, QFont::Bold));
 
     QStringList categories;
     int index = 0;
@@ -1209,6 +1213,11 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     axisYTrend->setLabelFormat("%d");
     axisYTrend->setLabelsColor(QColor(234, 234, 234));
     axisYTrend->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    int maxDefect = 1;
+    for (auto it = trendData.constBegin(); it != trendData.constEnd(); ++it) {
+        if (it.value().first > maxDefect) maxDefect = it.value().first;
+    }
+    axisYTrend->setRange(0, maxDefect + maxDefect * 0.25);
     chartTrend->addAxis(axisYTrend, Qt::AlignLeft);
 
     defectSeries->attachAxis(axisXTrend);
@@ -1217,6 +1226,10 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     QLineSeries* rateSeries = new QLineSeries();
     rateSeries->setName("Defect Rate (%)");
     rateSeries->setColor(QColor(0, 217, 255));
+    rateSeries->setPointLabelsVisible(true);
+    rateSeries->setPointLabelsFormat("@yPoint");
+    rateSeries->setPointLabelsColor(QColor(100, 220, 255));
+    rateSeries->setPointLabelsFont(QFont("Arial", 9, QFont::Bold));
 
     // Reuse the same categories from defect series for rate chart
     index = 0;
@@ -1243,7 +1256,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     for (auto it = defectRates.constBegin(); it != defectRates.constEnd(); ++it) {
         if (it.value() > maxRate) maxRate = it.value();
     }
-    axisYRate->setRange(0, maxRate * 1.1);  // Add 10% padding
+    axisYRate->setRange(0, maxRate * 1.3);  // Add 30% padding for labels
     chartRate->addAxis(axisYRate, Qt::AlignLeft);
 
     rateSeries->attachAxis(axisXRate);
@@ -1579,6 +1592,10 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
         QLineSeries* series = new QLineSeries();
         series->setName(defectType);
         series->setColor(defectColors.value(defectType, Qt::gray));
+        series->setPointLabelsVisible(true);
+        series->setPointLabelsFormat("@yPoint");
+        series->setPointLabelsColor(QColor(255, 255, 255));
+        series->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
         seriesMap[defectType] = series;
     }
 
@@ -1625,6 +1642,13 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
     axisY->setLabelFormat("%d");
     axisY->setLabelsColor(QColor(234, 234, 234));
     axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    int maxCount = 1;
+    for (auto it = defectTrendData.constBegin(); it != defectTrendData.constEnd(); ++it) {
+        for (auto typeIt = it.value().constBegin(); typeIt != it.value().constEnd(); ++typeIt) {
+            if (typeIt.value() > maxCount) maxCount = typeIt.value();
+        }
+    }
+    axisY->setRange(0, maxCount + maxCount * 0.25);
     chart->addAxis(axisY, Qt::AlignLeft);
 
     for (auto series : seriesMap.values()) {
