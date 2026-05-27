@@ -359,8 +359,10 @@ void Defect_Data_Display::onTabChanged(int index)
     qDebug() << "=== onTabChanged called with index:" << index << "===";
     QString timeRange = ui.comboTimeRange->currentText();
 
+    qDebug() << "onTabChanged: about to call QTimer::singleShot for index" << index;
     QTimer::singleShot(50, this, [this, index, timeRange]() {
         qDebug() << "=== Timer fired, processing index:" << index << "===";
+        qDebug() << "Timer lambda: starting switch";
         switch (index) {
         case 0:
         case 1:
@@ -391,9 +393,23 @@ void Defect_Data_Display::onTabChanged(int index)
             qDebug() << "Index 5: Detail";
             CachedTabData* cache = &m_detailCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
+                qDebug() << "Using cache, calling updateDetailTable from tab changed";
                 updateDetailTable(cache->defectDetails);
+                qDebug() << "updateDetailTable from cache returned, about to exit timer lambda";
             } else {
                 loadDetailDataAsync(timeRange);
+            }
+            break;
+        }
+        case 6: {  // TAB_LOCATION_ABNORMAL (some configurations use 6 instead of 7)
+            qDebug() << "=== Index 6: Location Abnormal - LOADING DATA ===";
+            CachedTabData* cache = &m_locationAbnormalCache;
+            if (isCacheValid(cache, timeRange, m_selectedDate)) {
+                qDebug() << "Using cache, calling updateLocationAbnormalChart";
+                updateLocationAbnormalChart(m_locationAbnormalData);
+            } else {
+                qDebug() << "Cache invalid, calling loadLocationAbnormalDataAsync";
+                loadLocationAbnormalDataAsync(timeRange);
             }
             break;
         }
@@ -413,7 +429,9 @@ void Defect_Data_Display::onTabChanged(int index)
             qDebug() << "Unknown index:" << index;
             break;
         }
+        qDebug() << "Timer lambda: about to exit switch";
     });
+    qDebug() << "Timer::singleShot call completed for onTabChanged";
 }
 
 void Defect_Data_Display::updateDateTime()
@@ -834,7 +852,9 @@ void Defect_Data_Display::onDataLoaded_Detail(const QList<QVariantList>& defectD
     m_detailCache.date = m_selectedDate;
     m_detailCache.timestamp = QDateTime::currentMSecsSinceEpoch();
 
+    qDebug() << "onDataLoaded_Detail: about to call updateDetailTable";
     updateDetailTable(defectDetails);
+    qDebug() << "onDataLoaded_Detail: updateDetailTable returned";
 }
 
 void Defect_Data_Display::onDataLoaded_PlatformTrend(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData, const QString& timeRange)
@@ -1176,6 +1196,12 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
 {
     qDebug() << "updateTrendChart called with" << trendData.size() << "data points";
 
+    // Check if chart views are initialized
+    if (!m_chartViewTrend || !m_chartViewDefectRate) {
+        qDebug() << "Chart views not initialized, returning early";
+        return;
+    }
+
     QChart* chartTrend = ((QChartView*)m_chartViewTrend)->chart();
     chartTrend->removeAllSeries();
 
@@ -1342,6 +1368,13 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
 {
     qDebug() << "updateDetailTable called with" << defectDetails.size() << "records";
 
+    if (defectDetails.isEmpty()) {
+        qDebug() << "No detail data, returning early";
+        return;
+    }
+
+    qDebug() << "Step 1: Counting defects by type";
+
     // Count by Code_AOI (row[0]) using actual count from row[2]
     QMap<QString, int> defectCountByType;
     for (const QVariantList& row : defectDetails) {
@@ -1350,54 +1383,86 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
         defectCountByType[codeAoi] = defectCountByType.value(codeAoi, 0) + cnt;
     }
 
-    // Create pie series for Code_AOI distribution
+    qDebug() << "Step 2: Defect types count =" << defectCountByType.size();
+
+    if (defectCountByType.isEmpty()) {
+        qDebug() << "No defect types found, returning early";
+        return;
+    }
+
+    qDebug() << "Step 3: Creating pie series";
+
     QPieSeries* pieSeries = new QPieSeries();
     pieSeries->setLabelsVisible(true);
 
-    // Define colors for each defect type - high contrast palette
-    QMap<QString, QColor> defectColors;
-    defectColors["BlackDot"] = QColor(220, 60, 60);     // Bright Red
-    defectColors["BrightDot"] = QColor(255, 180, 0);    // Vivid Orange
-    defectColors["Line"] = QColor(0, 200, 255);         // Cyan Blue
-    defectColors["Mura"] = QColor(80, 255, 100);        // Lime Green
-    defectColors["Block"] = QColor(255, 100, 200);      // Pink
-    defectColors["Bubble"] = QColor(180, 100, 255);     // Purple
-    defectColors["Dent"] = QColor(255, 220, 80);        // Yellow
-    defectColors["Scratch"] = QColor(100, 255, 255);    // Bright Cyan
+    // Define a palette of bright and distinguishable colors
+    QList<QColor> colorPalette;
+    colorPalette << QColor(255, 80, 80)   // Bright Red
+                << QColor(255, 220, 0)    // Bright Yellow
+                << QColor(0, 200, 255)   // Cyan Blue
+                << QColor(200, 100, 255)  // Purple
+                << QColor(80, 255, 120)   // Green
+                << QColor(255, 140, 200)  // Pink
+                << QColor(255, 160, 60)   // Orange
+                << QColor(100, 180, 255)  // Light Blue
+                << QColor(180, 255, 180)  // Light Green
+                << QColor(255, 200, 100)  // Light Orange
+                << QColor(150, 150, 255)  // Lavender
+                << QColor(255, 150, 150); // Salmon
 
+    int colorIndex = 0;
     for (auto it = defectCountByType.constBegin(); it != defectCountByType.constEnd(); ++it) {
         QString defectType = it.key();
         int count = it.value();
         QPieSlice* slice = pieSeries->append(defectType, count);
-        slice->setColor(defectColors.value(defectType, Qt::gray));
+        slice->setColor(colorPalette[colorIndex % colorPalette.size()]);
         slice->setLabelBrush(QBrush(QColor(234, 234, 234)));
         slice->setLabelFont(QFont("Arial", 10, QFont::Bold));
+        colorIndex++;
     }
 
-    if (m_chartViewPieDetail) {
-        QChart* pieChart = ((QChartView*)m_chartViewPieDetail)->chart();
-        pieChart->removeAllSeries();
-        pieChart->addSeries(pieSeries);
-    } else {
-        QChart* pieChart = new QChart();
-        pieChart->setTitle("缺陷类型分布");
-        pieChart->setAnimationOptions(QChart::NoAnimation);
-        pieChart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
-        pieChart->setTitleBrush(QBrush(QColor(0, 217, 255)));
-        pieChart->legend()->setLabelColor(QColor(234, 234, 234));
-        pieChart->legend()->setFont(QFont("Arial", 9));
-        pieChart->addSeries(pieSeries);
+    // Force set colors after adding all slices
+    int idx = 0;
+    for (QPieSlice* slice : pieSeries->slices()) {
+        slice->setColor(colorPalette[idx % colorPalette.size()]);
+        idx++;
+    }
 
-        m_chartViewPieDetail = new QChartView(pieChart);
-        ((QChartView*)m_chartViewPieDetail)->setRenderHint(QPainter::Antialiasing);
-        ((QChartView*)m_chartViewPieDetail)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    qDebug() << "Step 4: Creating pie chart";
 
+    QChart* pieChart = new QChart();
+    pieChart->setTitle("缺陷类型分布");
+    pieChart->setAnimationOptions(QChart::NoAnimation);
+    pieChart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    pieChart->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    pieChart->legend()->setLabelColor(QColor(234, 234, 234));
+    pieChart->legend()->setFont(QFont("Arial", 9));
+    pieChart->addSeries(pieSeries);
+
+    qDebug() << "Step 5: Creating pie chart view";
+
+    QChartView* newPieChartView = new QChartView(pieChart);
+    newPieChartView->setRenderHint(QPainter::Antialiasing);
+    newPieChartView->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+
+    qDebug() << "Step 6: Adding pie chart to layout";
+
+    // Only create layout if one doesn't exist
+    if (ui.chartPieDetail->layout() == nullptr) {
         QVBoxLayout* layoutPie = new QVBoxLayout(ui.chartPieDetail);
         layoutPie->setContentsMargins(0, 0, 0, 0);
-        layoutPie->addWidget((QChartView*)m_chartViewPieDetail);
+    }
+    if (ui.chartPieDetail->layout() != nullptr) {
+        ui.chartPieDetail->layout()->addWidget(newPieChartView);
     }
 
-    // Create bar series
+    // Schedule old chart view for deletion using deleteLater to avoid Qt internal access issues
+    if (m_chartViewPieDetail) {
+        ((QWidget*)m_chartViewPieDetail)->deleteLater();
+    }
+    m_chartViewPieDetail = newPieChartView;
+
+    qDebug() << "Step 7: Creating bar series";
     QBarSeries* series = new QBarSeries();
     series->setLabelsVisible(true);
     series->setLabelsFormat("@value");
@@ -1413,33 +1478,42 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
 
     series->append(set);
 
-    // Create or update chart
-    QChart* chart;
-    if (m_chartViewDetail) {
-        chart = ((QChartView*)m_chartViewDetail)->chart();
-        chart->removeAllSeries();
-        for (auto axis : chart->axes()) {
-            chart->removeAxis(axis);
-        }
-    } else {
-        chart = new QChart();
-        chart->setTitle("Code_AOI Distribution");
-        chart->setAnimationOptions(QChart::NoAnimation);
-        chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
-        chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
-        chart->legend()->setLabelColor(QColor(234, 234, 234));
-        chart->legend()->hide();
+    qDebug() << "Step 8: Creating bar chart";
 
-        m_chartViewDetail = new QChartView(chart);
-        ((QChartView*)m_chartViewDetail)->setRenderHint(QPainter::Antialiasing);
-        ((QChartView*)m_chartViewDetail)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    QChart* chart = new QChart();
+    chart->setTitle("Code_AOI Distribution");
+    chart->setAnimationOptions(QChart::NoAnimation);
+    chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    chart->legend()->setLabelColor(QColor(234, 234, 234));
+    chart->legend()->hide();
 
+    QChartView* newDetailChartView = new QChartView(chart);
+    newDetailChartView->setRenderHint(QPainter::Antialiasing);
+    newDetailChartView->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+
+    qDebug() << "Step 9: Adding bar chart to layout";
+
+    // Only create layout if one doesn't exist
+    if (ui.chartDetail->layout() == nullptr) {
         QVBoxLayout* layout = new QVBoxLayout(ui.chartDetail);
         layout->setContentsMargins(0, 0, 0, 0);
-        layout->addWidget((QChartView*)m_chartViewDetail);
+    }
+    if (ui.chartDetail->layout() != nullptr) {
+        ui.chartDetail->layout()->addWidget(newDetailChartView);
     }
 
+    // Schedule old chart view for deletion using deleteLater to avoid Qt internal access issues
+    if (m_chartViewDetail) {
+        ((QWidget*)m_chartViewDetail)->deleteLater();
+    }
+    m_chartViewDetail = newDetailChartView;
+
+    qDebug() << "Step 10: Adding series to chart";
+
     chart->addSeries(series);
+
+    qDebug() << "Step 11: Creating axes";
 
     QBarCategoryAxis* axisX = new QBarCategoryAxis();
     axisX->append(categories);
@@ -1466,6 +1540,11 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
 
     series->attachAxis(axisX);
     series->attachAxis(axisY);
+
+    qDebug() << "Checking chart view validity after attachAxis: pieDetail =" << (m_chartViewPieDetail != nullptr) << "chartDetail =" << (m_chartViewDetail != nullptr);
+
+    qDebug() << "updateDetailTable completed successfully - about to return";
+    qDebug() << "Exiting updateDetailTable";
 }
 
 void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData)
@@ -1634,6 +1713,11 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
 void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QString, int>>& defectTrendData)
 {
     qDebug() << "updateDefectTrendChart called with" << defectTrendData.size() << "time periods";
+
+    if (!m_chartViewAoi) {
+        qDebug() << "m_chartViewAoi not initialized, returning early";
+        return;
+    }
 
     QChart* chart = ((QChartView*)m_chartViewAoi)->chart();
     chart->removeAllSeries();
