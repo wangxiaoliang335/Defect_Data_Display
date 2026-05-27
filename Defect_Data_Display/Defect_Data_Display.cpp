@@ -13,6 +13,7 @@
 #include <QMouseEvent>
 #include <QApplication>
 #include <QFont>
+#include <QHeaderView>
 
 Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     : QMainWindow(parent)
@@ -53,6 +54,65 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     connect(ui.btnMinimize, &QPushButton::clicked, this, &Defect_Data_Display::onMinimizeClicked);
     connect(ui.btnClose, &QPushButton::clicked, this, &Defect_Data_Display::onCloseClicked);
     connect(ui.tabWidget, &QTabWidget::currentChanged, this, &Defect_Data_Display::onTabChanged);
+    connect(ui.searchEdit, &QLineEdit::returnPressed, this, &Defect_Data_Display::onSearchClicked);
+    connect(ui.btnSearch, &QPushButton::clicked, this, &Defect_Data_Display::onSearchClicked);
+
+    // Search box styling
+    ui.searchEdit->setStyleSheet(R"(
+        QLineEdit {
+            background-color: rgba(30, 40, 60, 200);
+            border: 1px solid rgba(0, 217, 255, 80);
+            border-radius: 6px;
+            padding: 4px 10px;
+            color: #e0f0ff;
+            font-size: 13px;
+            selection-background-color: #00d9ff;
+            selection-color: #000;
+        }
+        QLineEdit:focus {
+            border: 1px solid #00d9ff;
+            background-color: rgba(20, 35, 55, 220);
+        }
+        QLineEdit:!enabled {
+            background-color: rgba(20, 30, 45, 150);
+            color: #607080;
+            border: 1px solid rgba(0, 217, 255, 40);
+        }
+    )");
+
+    ui.btnSearch->setStyleSheet(R"(
+        QPushButton {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 150, 200, 180),
+                stop:1 rgba(0, 100, 160, 180));
+            color: #ffffff;
+            border: 1px solid rgba(0, 217, 255, 100);
+            border-radius: 6px;
+            padding: 4px 12px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 190, 250, 220),
+                stop:1 rgba(0, 130, 200, 220));
+            border: 1px solid #00d9ff;
+            color: #ffffff;
+        }
+        QPushButton:pressed {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 100, 160, 220),
+                stop:1 rgba(0, 70, 120, 220));
+            border: 1px solid rgba(0, 217, 255, 150);
+            padding-top: 5px;
+            padding-bottom: 3px;
+        }
+        QPushButton:!enabled {
+            background-color: rgba(40, 55, 70, 150);
+            color: #607080;
+            border: 1px solid rgba(0, 217, 255, 40);
+        }
+    )");
 
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &Defect_Data_Display::updateDateTime);
@@ -132,6 +192,152 @@ void Defect_Data_Display::onCloseClicked()
     close();
 }
 
+void Defect_Data_Display::onSearchClicked()
+{
+    QString screenId = ui.searchEdit->text().trimmed();
+    m_searchScreenId = screenId;
+    qDebug() << "=== onSearchClicked called ===" << "ScreenID:" << screenId;
+
+    if (!screenId.isEmpty()) {
+        ui.labelStatus->setText("Searching...");
+        ui.labelStatus->setStyleSheet("color: #ffaa00;");
+        performQrCodeSearch(screenId);
+    }
+}
+
+void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
+{
+    if (screenId.isEmpty())
+        return;
+
+    // Update search result tab header
+    ui.labelSearchId->setText(QString("搜索ID: %1").arg(screenId));
+
+    // Switch to search result tab
+    ui.tabWidget->setCurrentIndex(TAB_SEARCH);
+
+    // Setup search result table style
+    ui.searchResultTable->setStyleSheet(R"(
+        QTableWidget {
+            background-color: #16213e;
+            color: #e0f0ff;
+            gridline-color: rgba(0, 217, 255, 60);
+            font-size: 13px;
+            border: none;
+            border-radius: 8px;
+            padding: 4px;
+        }
+        QTableWidget::item {
+            padding: 6px 8px;
+        }
+        QTableWidget::item:selected {
+            background-color: rgba(0, 217, 255, 80);
+            color: #ffffff;
+        }
+        QHeaderView::section {
+            background-color: rgba(0, 150, 200, 150);
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 13px;
+            padding: 6px 8px;
+            border: none;
+            border-bottom: 1px solid rgba(0, 217, 255, 100);
+            border-right: 1px solid rgba(0, 217, 255, 60);
+        }
+        QTableWidget QTableCornerButton::section {
+            background-color: rgba(0, 150, 200, 150);
+            border: none;
+        }
+    )");
+    ui.searchResultTable->setAlternatingRowColors(true);
+    ui.searchResultTable->verticalHeader()->setVisible(false);
+    ui.searchResultTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    ui.searchResultTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    ui.searchResultTable->horizontalHeader()->setStretchLastSection(true);
+    for (int i = 0; i < 5; ++i)
+        ui.searchResultTable->horizontalHeader()->setSectionResizeMode(i, QHeaderView::ResizeToContents);
+
+    // Set column headers
+    QStringList headers = {"Code_AOI", "Grade_AOI", "检测数量", "工位", "检测时间", "结果"};
+    for (int i = 0; i < headers.size() && i < ui.searchResultTable->columnCount(); ++i)
+        ui.searchResultTable->setHorizontalHeaderItem(i, new QTableWidgetItem(headers[i]));
+
+    // Query database for matching records (no time limit for QR search)
+    if (!m_db.isOpen()) {
+        ui.labelStatus->setText("Database not connected");
+        ui.labelStatus->setStyleSheet("color: #ff4444;");
+        return;
+    }
+
+    QString queryStr = QString(R"(
+        SELECT
+            ir.Code_AOI,
+            ir.Grade_AOI,
+            COUNT(*) as cnt,
+            ir.PlatformID,
+            ir.StartTime,
+            ir.AOIResult
+        FROM ivs_lcd_inspectionresult ir
+        WHERE ir.ScreenID = '%1'
+        GROUP BY ir.Code_AOI, ir.Grade_AOI, ir.PlatformID, ir.AOIResult, DATE(ir.StartTime), HOUR(ir.StartTime)
+        ORDER BY ir.StartTime DESC
+        LIMIT 500
+    )").arg(screenId);
+
+    qDebug() << "Executing QR search query:" << queryStr;
+
+    QSqlQuery query(m_db);
+    query.setForwardOnly(true);
+    query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
+
+    if (!query.exec(queryStr)) {
+        qDebug() << "QR search query failed:" << query.lastError().text();
+        ui.labelStatus->setText("Query failed");
+        ui.labelStatus->setStyleSheet("color: #ff4444;");
+        return;
+    }
+
+    int row = 0;
+    ui.searchResultTable->setRowCount(0);
+
+    while (query.next()) {
+        ui.searchResultTable->insertRow(row);
+
+        QString codeAoi = query.value(0).toString();
+        QString gradeAoi = query.value(1).toString();
+        int cnt = query.value(2).toInt();
+        int platformId = query.value(3).toInt();
+        QDateTime startTime = query.value(4).toDateTime();
+        QString aoiResult = query.value(5).toString();
+
+        ui.searchResultTable->setItem(row, 0, new QTableWidgetItem(codeAoi));
+        ui.searchResultTable->setItem(row, 1, new QTableWidgetItem(gradeAoi));
+        ui.searchResultTable->setItem(row, 2, new QTableWidgetItem(QString::number(cnt)));
+        ui.searchResultTable->setItem(row, 3, new QTableWidgetItem(QString("P%1").arg(platformId)));
+
+        QTableWidgetItem* timeItem = new QTableWidgetItem(startTime.toString("yyyy-MM-dd HH:mm:ss"));
+        timeItem->setForeground(QBrush(QColor(100, 180, 220)));
+        timeItem->setFont(QFont(ui.searchResultTable->font().family(), 12));
+        ui.searchResultTable->setItem(row, 4, timeItem);
+
+        QTableWidgetItem* resultItem = new QTableWidgetItem(aoiResult);
+        if (aoiResult == "OK") {
+            resultItem->setForeground(QBrush(QColor(0, 255, 136)));
+        } else {
+            resultItem->setForeground(QBrush(QColor(255, 100, 100)));
+        }
+        ui.searchResultTable->setItem(row, 5, resultItem);
+
+        ++row;
+    }
+
+    ui.searchResultTable->setRowCount(row);
+    ui.labelStatus->setText(QString("Found %1 records for %2").arg(row).arg(screenId));
+    ui.labelStatus->setStyleSheet(row > 0 ? "color: #00ff88;" : "color: #ffaa00;");
+
+    qDebug() << "QR search completed. Rows:" << row;
+}
+
 void Defect_Data_Display::onDateChanged(const QDate& date)
 {
     qDebug() << "=== onDateChanged called ===" << date.toString();
@@ -193,7 +399,7 @@ void Defect_Data_Display::updateDateTime()
 void Defect_Data_Display::setupCharts()
 {
     // Create 4 separate charts for each platform
-    QStringList platformNames = {"P0", "P1", "P2", "P3"};
+    QStringList platformNames = {"工位一", "工位二", "工位三", "工位四"};
     QList<QColor> platformColors = {
         QColor(0, 255, 136),    // P0 - Green
         QColor(255, 200, 0),    // P1 - Yellow
@@ -445,7 +651,7 @@ void Defect_Data_Display::onRefreshClicked()
     int thisLoadId = m_currentLoadId;
 
     qDebug() << "Creating new worker thread with loadId:" << thisLoadId;
-    m_workerThread = new DataLoaderThread(thisLoadId, timeRange, getDateTimeRange(timeRange), this);
+    m_workerThread = new DataLoaderThread(thisLoadId, timeRange, getDateTimeRange(timeRange), m_searchScreenId, this);
 
     connect(m_workerThread, &DataLoaderThread::aoiDataLoaded,
             this, &Defect_Data_Display::onDataLoaded_Aoi, Qt::QueuedConnection);
@@ -1207,7 +1413,7 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
         QColor(255, 100, 100)   // P3 - Red
     };
 
-    QStringList platformNames = {"P0", "P1", "P2", "P3"};
+    QStringList platformNames = {"工位一", "工位二", "工位三", "工位四"};
 
     // Create chart for each platform
     void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
@@ -1486,11 +1692,13 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
     failBarSeries->attachAxis(failAxisY);
 }
 
-DataLoaderThread::DataLoaderThread(int loadId, const QString& timeRange, const QString& dateRange, QObject* parent)
+DataLoaderThread::DataLoaderThread(int loadId, const QString& timeRange, const QString& dateRange,
+                                   const QString& searchScreenId, QObject* parent)
     : QThread(parent)
     , m_loadId(loadId)
     , m_timeRange(timeRange)
     , m_dateRange(dateRange)
+    , m_searchScreenId(searchScreenId)
 {
 }
 
@@ -1520,6 +1728,13 @@ void DataLoaderThread::run()
     qDebug() << "Time range:" << m_timeRange;
     qDebug() << "Date range:" << m_dateRange;
 
+    // Build query condition with optional ScreenID filter
+    QString queryCondition = m_dateRange;
+    if (!m_searchScreenId.isEmpty()) {
+        queryCondition += QString(" AND ScreenID = '%1'").arg(m_searchScreenId);
+        qDebug() << "ScreenID filter:" << m_searchScreenId;
+    }
+
     // Get time format based on time range
     QString timeFormat;
     if (m_timeRange == "按小时") {
@@ -1540,7 +1755,7 @@ void DataLoaderThread::run()
         WHERE %2
         GROUP BY time_period, PlatformID
         ORDER BY time_period, PlatformID
-    )").arg(timeFormat).arg(m_dateRange);
+    )").arg(timeFormat).arg(queryCondition);
 
     QSqlQuery platformTrendQ(db);
     platformTrendQ.setForwardOnly(true);
@@ -1567,7 +1782,7 @@ void DataLoaderThread::run()
         WHERE %2
         GROUP BY time_period, Type
         ORDER BY time_period
-    )").arg(timeFormat).arg(m_dateRange);
+    )").arg(timeFormat).arg(queryCondition);
 
     QSqlQuery defectTrendQ(db);
     defectTrendQ.setForwardOnly(true);
@@ -1594,7 +1809,7 @@ void DataLoaderThread::run()
         WHERE %2
         GROUP BY time_period
         ORDER BY time_period
-    )").arg(timeFormat).arg(m_dateRange);
+    )").arg(timeFormat).arg(queryCondition);
 
     QSqlQuery inspectionTrendQ(db);
     inspectionTrendQ.setForwardOnly(true);
@@ -1633,7 +1848,7 @@ void DataLoaderThread::run()
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
         WHERE %1
         GROUP BY PlatformID
-    )").arg(m_dateRange);
+    )").arg(queryCondition);
 
     QSqlQuery combinedQuery(db);
     combinedQuery.setForwardOnly(true);
@@ -1725,7 +1940,7 @@ void Defect_Data_Display::loadDefectMappingAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 3, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, this);
+        getDateTimeRange(timeRange), m_selectedDate, "", this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::defectMappingDataLoaded,
@@ -1759,7 +1974,7 @@ void Defect_Data_Display::loadTrendDataAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 4, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, this);
+        getDateTimeRange(timeRange), m_selectedDate, "", this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::trendDataLoaded,
@@ -1792,7 +2007,7 @@ void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 5, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, this);
+        getDateTimeRange(timeRange), m_selectedDate, "", this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::detailDataLoaded,
@@ -1809,13 +2024,15 @@ void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
 }
 
 TabDataLoaderThread::TabDataLoaderThread(int loadId, int tabIndex, const QString& timeRange,
-                                       const QString& dateRange, const QDate& date, QObject* parent)
+                                       const QString& dateRange, const QDate& date,
+                                       const QString& searchScreenId, QObject* parent)
     : QThread(parent)
     , m_loadId(loadId)
     , m_tabIndex(tabIndex)
     , m_timeRange(timeRange)
     , m_dateRange(dateRange)
     , m_date(date)
+    , m_searchScreenId(searchScreenId)
 {
 }
 
