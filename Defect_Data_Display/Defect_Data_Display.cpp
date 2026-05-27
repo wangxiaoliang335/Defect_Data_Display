@@ -1,4 +1,4 @@
-#include "Defect_Data_Display.h"
+﻿#include "Defect_Data_Display.h"
 #include <QtCharts/QChartView>
 #include <QtCharts/QBarSeries>
 #include <QtCharts/QBarSet>
@@ -910,6 +910,9 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
     defectColors["Block"] = Qt::green;
 
     QBarSeries* series = new QBarSeries();
+    series->setLabelsVisible(true);
+    series->setLabelsFormat("@value");
+    series->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
 
     for (auto it = defectByType.constBegin(); it != defectByType.constEnd(); ++it) {
         QString defectType = it.key();
@@ -939,6 +942,15 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
     axisY->setLabelFormat("%d");
     axisY->setLabelsColor(QColor(234, 234, 234));
     axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    int maxDefect = 0;
+    for (auto it = defectByType.constBegin(); it != defectByType.constEnd(); ++it) {
+        int total = 0;
+        for (const auto& pair : it.value()) {
+            total += pair.second;
+        }
+        if (total > maxDefect) maxDefect = total;
+    }
+    axisY->setRange(0, maxDefect > 0 ? maxDefect + maxDefect * 0.2 : 10);
     chart->addAxis(axisY, Qt::AlignLeft);
 
     series->attachAxis(axisX);
@@ -1467,6 +1479,9 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
         }
 
         series->append(failSet);
+        series->setLabelsVisible(true);
+        series->setLabelsFormat("@value");
+        series->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
         chart->addSeries(series);
         chart->setTitle(platformNames[p] + " (" + timeRange + ") - Fail");
         chart->legend()->hide();
@@ -1487,6 +1502,37 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
         axisYFont.setPointSize(10);
         axisY->setLabelsFont(axisYFont);
         axisY->setTitleBrush(QBrush(platformColors[p]));
+        int maxVal = 1;
+        for (const QString& timeKey : timeCategories) {
+            QString originalKey;
+            for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
+                QString label = it.key();
+                if (timeRange == "按小时" && label.contains(" ")) {
+                    QString timePart = label.split(" ").at(1);
+                    if (timePart.left(5) == timeKey) {
+                        originalKey = it.key();
+                        break;
+                    }
+                } else if (timeRange == "按天" && label.contains("-")) {
+                    QStringList parts = label.split("-");
+                    if (parts.size() >= 3 && parts.at(2) == timeKey) {
+                        originalKey = it.key();
+                        break;
+                    }
+                } else if (timeRange == "按月" && label == timeKey) {
+                    originalKey = it.key();
+                    break;
+                }
+            }
+            if (!originalKey.isEmpty() && platformTrendData.contains(originalKey)) {
+                const QMap<int, QPair<int, int>>& platformData = platformTrendData[originalKey];
+                if (platformData.contains(p)) {
+                    int val = platformData[p].second;
+                    if (val > maxVal) maxVal = val;
+                }
+            }
+        }
+        axisY->setRange(0, maxVal + maxVal * 0.2);
         chart->addAxis(axisY, Qt::AlignLeft);
 
         series->attachAxis(axisX);
@@ -1651,11 +1697,16 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
     }
 
     passBarSeries->append(passSet);
-    failBarSeries->append(failSet);
-
+    passBarSeries->setLabelsVisible(true);
+    passBarSeries->setLabelsFormat("@value");
+    passBarSeries->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
     passChart->addSeries(passBarSeries);
     passChart->setTitle("Pass Count (" + timeRange + ")");
 
+    failBarSeries->append(failSet);
+    failBarSeries->setLabelsVisible(true);
+    failBarSeries->setLabelsFormat("@value");
+    failBarSeries->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
     failChart->addSeries(failBarSeries);
     failChart->setTitle("Fail Count (" + timeRange + ")");
 
@@ -1670,6 +1721,11 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
     passAxisY->setLabelFormat("%d");
     passAxisY->setLabelsColor(QColor(234, 234, 234));
     passAxisY->setTitleBrush(QBrush(QColor(0, 255, 136)));
+    int maxPass = 1;
+    for (auto it = inspectionTrendData.constBegin(); it != inspectionTrendData.constEnd(); ++it) {
+        if (it.value().first > maxPass) maxPass = it.value().first;
+    }
+    passAxisY->setRange(0, maxPass + maxPass * 0.2);
     passChart->addAxis(passAxisY, Qt::AlignLeft);
 
     passBarSeries->attachAxis(passAxisX);
@@ -1686,6 +1742,11 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
     failAxisY->setLabelFormat("%d");
     failAxisY->setLabelsColor(QColor(234, 234, 234));
     failAxisY->setTitleBrush(QBrush(QColor(255, 68, 68)));
+    int maxFail = 1;
+    for (auto it = inspectionTrendData.constBegin(); it != inspectionTrendData.constEnd(); ++it) {
+        if (it.value().second > maxFail) maxFail = it.value().second;
+    }
+    failAxisY->setRange(0, maxFail + maxFail * 0.2);
     failChart->addAxis(failAxisY, Qt::AlignLeft);
 
     failBarSeries->attachAxis(failAxisX);
