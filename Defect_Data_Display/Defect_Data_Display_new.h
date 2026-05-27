@@ -21,7 +21,6 @@
 #include <QThread>
 #include <QMutex>
 #include <QChartView>
-#include <QTableWidget>
 #include "ui_Defect_Data_Display.h"
 
 class DataLoaderThread;
@@ -60,8 +59,6 @@ private slots:
     void onCloseClicked();
     void onTabChanged(int index);
     void onDateChanged(const QDate& date);
-    void onSearchClicked();
-    void performQrCodeSearch(const QString& screenId);
 
     void onDataLoaded_Aoi(const QMap<QString, QList<QPair<QString, int>>>& defectByType, int totalDefects);
     void onDataLoaded_Inspection(const QMap<QString, int>& passByPeriod, const QMap<QString, int>& failByPeriod,
@@ -90,10 +87,14 @@ private:
     QChartView* m_chartViewPlatform0;
     QChartView* m_chartViewPlatform1;
     QChartView* m_chartViewPlatform2;
-    QChartView* m_chartViewPlatform3;
+    
     void* m_chartViewDetail;
     void* m_chartViewPieDetail;
-    void* m_chartViewLocationAbnormal;
+    void* m_chartViewLocationAbnormalPage1;
+    void* m_chartViewLocationAbnormalPage2;
+    void* m_chartViewLocationAbnormalPage3;
+    void* m_chartViewLocationAbnormalPage4;
+    int m_locationAbnormalCurrentPage;
     QTimer* m_timer;
     QDate m_selectedDate;
 
@@ -111,9 +112,6 @@ private:
     CachedTabData m_trendCache;
     CachedTabData m_detailCache;
     qint64 m_lastMainLoadTime;
-    static constexpr int TAB_SEARCH = 6;
-    static constexpr int TAB_LOCATION_ABNORMAL = 7;
-    QString m_searchScreenId;  // ScreenID for search filtering
 
     // New member variables for time-based trend data
     QMap<QString, QMap<int, QPair<int, int>>> m_platformTrendData;  // time_period -> platform_id -> (pass, fail)
@@ -155,7 +153,11 @@ private:
     void loadLocationAbnormalDataAsync(const QString& timeRange);
     void updateLocationAbnormalChart(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
-    QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count
+    void onPrevPageClicked();
+    void onNextPageClicked();
+    void updateLocationAbnormalPageDisplay();
+
+    QMap<QString, QMap<int, int>> m_locationAbnormalData;
     CachedTabData m_locationAbnormalCache;
 };
 
@@ -164,8 +166,7 @@ class DataLoaderThread : public QThread
     Q_OBJECT
 
 public:
-    DataLoaderThread(int loadId, const QString& timeRange, const QString& dateRange,
-                     const QString& searchScreenId = "", QObject* parent = nullptr);
+    DataLoaderThread(int loadId, const QString& timeRange, const QString& dateRange, QObject* parent = nullptr);
     int getLoadId() const { return m_loadId; }
     void run() override;
 
@@ -188,7 +189,6 @@ protected:
     int m_loadId;
     QString m_timeRange;
     QString m_dateRange;
-    QString m_searchScreenId;
 };
 
 class TabDataLoaderThread : public QThread
@@ -197,7 +197,7 @@ class TabDataLoaderThread : public QThread
 
 public:
     TabDataLoaderThread(int loadId, int tabIndex, const QString& timeRange, const QString& dateRange,
-                       const QDate& date, const QString& searchScreenId = "", QObject* parent = nullptr);
+                       const QDate& date, QObject* parent = nullptr);
     int getLoadId() const { return m_loadId; }
     int getTabIndex() const { return m_tabIndex; }
     void run() override;
@@ -215,6 +215,4 @@ protected:
     QString m_timeRange;
     QString m_dateRange;
     QDate m_date;
-    QString m_searchScreenId;
-    QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count
 };

@@ -740,15 +740,34 @@ QWidget#centralWidget {
        </attribute>
        <layout class="QVBoxLayout" name="tabDetailLayout">
         <item>
-        <widget class="QFrame" name="chartDetail">
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>500</height>
-          </size>
-         </property>
-         <property name="styleSheet">
-          <string>
+         <widget class="QFrame" name="chartDetail">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>300</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>
+QFrame {
+    background-color: #16213e;
+    border: none;
+    border-radius: 8px;
+}
+           </string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="chartPieDetail">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>450</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>
 QFrame {
     background-color: #16213e;
     border: none;
@@ -857,6 +876,145 @@ QLabel {
             <string>结果</string>
            </property>
           </column>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="tabLocationAbnormal">
+       <attribute name="title">
+        <string>定位异常</string>
+       </attribute>
+       <layout class="QVBoxLayout" name="tabLocationAbnormalLayout">
+        <item>
+         <widget class="QLabel" name="labelLocationAbnormalTitle">
+          <property name="text">
+           <string>定位异常工位分布</string>
+          </property>
+          <property name="styleSheet">
+           <string>
+QLabel {
+    color: #00d9ff;
+    font-size: 16px;
+    font-weight: bold;
+    background: transparent;
+    padding: 5px;
+}
+           </string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QTabWidget" name="tabLocationAbnormalPages">
+          <property name="styleSheet">
+           <string>
+QTabWidget::pane {
+    border: none;
+    background-color: #16213e;
+    border-radius: 8px;
+}
+QTabBar::tab {
+    background-color: #0f3460;
+    color: #888;
+    padding: 8px 24px;
+    margin-right: 5px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+QTabBar::tab:selected {
+    background-color: #16213e;
+    color: #00d9ff;
+}
+QTabBar::tab:hover {
+    background-color: #1a4d7c;
+}
+           </string>
+          </property>
+          <property name="currentIndex">
+           <number>0</number>
+          </property>
+          <widget class="QWidget" name="chartLocationAbnormalPage1">
+           <attribute name="title">
+            <string>工位 1-4</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="layoutPage1">
+            <item>
+             <widget class="QFrame" name="chartLocationAbnormalFrame1">
+              <property name="styleSheet">
+               <string>
+QFrame {
+    background-color: #16213e;
+    border: none;
+    border-radius: 8px;
+}
+               </string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="chartLocationAbnormalPage2">
+           <attribute name="title">
+            <string>工位 5-8</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="layoutPage2">
+            <item>
+             <widget class="QFrame" name="chartLocationAbnormalFrame2">
+              <property name="styleSheet">
+               <string>
+QFrame {
+    background-color: #16213e;
+    border: none;
+    border-radius: 8px;
+}
+               </string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="chartLocationAbnormalPage3">
+           <attribute name="title">
+            <string>工位 9-12</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="layoutPage3">
+            <item>
+             <widget class="QFrame" name="chartLocationAbnormalFrame3">
+              <property name="styleSheet">
+               <string>
+QFrame {
+    background-color: #16213e;
+    border: none;
+    border-radius: 8px;
+}
+               </string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="chartLocationAbnormalPage4">
+           <attribute name="title">
+            <string>工位 13-16</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="layoutPage4">
+            <item>
+             <widget class="QFrame" name="chartLocationAbnormalFrame4">
+              <property name="styleSheet">
+               <string>
+QFrame {
+    background-color: #16213e;
+    border: none;
+    border-radius: 8px;
+}
+               </string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
          </widget>
         </item>
        </layout>

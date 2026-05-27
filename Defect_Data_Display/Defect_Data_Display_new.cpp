@@ -9,14 +9,17 @@
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QPieSeries>
 #include <QtCharts/QPieSlice>
+#include <QtCharts/QBarSeries>
+#include <QtCharts/QBarSet>
+#include <QtCharts/QBarCategoryAxis>
 #include <QVBoxLayout>
+#include <QGridLayout>
 #include <QPainter>
 #include <QTimer>
 #include <QMouseEvent>
 #include <QApplication>
 #include <QFont>
 #include <QHeaderView>
-#include <algorithm>
 
 Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     : QMainWindow(parent)
@@ -32,7 +35,11 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_chartViewDefectRate(nullptr)
     , m_chartViewDetail(nullptr)
     , m_chartViewPieDetail(nullptr)
-    , m_chartViewLocationAbnormal(nullptr)
+    , m_chartViewLocationAbnormalPage1(nullptr)
+    , m_chartViewLocationAbnormalPage2(nullptr)
+    , m_chartViewLocationAbnormalPage3(nullptr)
+    , m_chartViewLocationAbnormalPage4(nullptr)
+    , m_locationAbnormalCurrentPage(1)
     , m_timer(nullptr)
     , m_workerThread(nullptr)
     , m_tabWorkerThread(nullptr)
@@ -52,6 +59,10 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     ui.dateEdit->setDisplayFormat("yyyy-MM-dd");
 
     setupCharts();
+
+    // Connect page navigation buttons
+    connect(ui.btnPrevPage, &QPushButton::clicked, this, &Defect_Data_Display::onPrevPageClicked);
+    connect(ui.btnNextPage, &QPushButton::clicked, this, &Defect_Data_Display::onNextPageClicked);
 
     connect(ui.btnRefresh, &QPushButton::clicked, this, &Defect_Data_Display::onRefreshClicked);
     connect(ui.comboTimeRange, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -217,7 +228,7 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
         return;
 
     // Update search result tab header
-    ui.labelSearchId->setText(QString("搜索ID: %1").arg(screenId));
+    ui.labelSearchId->setText(QString("屏幕ID: %1").arg(screenId));
 
     // Switch to search result tab
     ui.tabWidget->setCurrentIndex(TAB_SEARCH);
@@ -356,19 +367,15 @@ void Defect_Data_Display::onDateChanged(const QDate& date)
 
 void Defect_Data_Display::onTabChanged(int index)
 {
-    qDebug() << "=== onTabChanged called with index:" << index << "===";
     QString timeRange = ui.comboTimeRange->currentText();
 
     QTimer::singleShot(50, this, [this, index, timeRange]() {
-        qDebug() << "=== Timer fired, processing index:" << index << "===";
         switch (index) {
         case 0:
         case 1:
         case 2:
-            qDebug() << "Index 0-2: doing nothing";
             break;
         case 3: {
-            qDebug() << "Index 3: Defect Mapping";
             CachedTabData* cache = &m_defectMappingCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
                 updateDefectMappingChart(cache->positions, cache->types);
@@ -378,7 +385,6 @@ void Defect_Data_Display::onTabChanged(int index)
             break;
         }
         case 4: {
-            qDebug() << "Index 4: Trend";
             CachedTabData* cache = &m_trendCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
                 updateTrendChart(cache->trendData, cache->defectRates);
@@ -388,7 +394,6 @@ void Defect_Data_Display::onTabChanged(int index)
             break;
         }
         case 5: {
-            qDebug() << "Index 5: Detail";
             CachedTabData* cache = &m_detailCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
                 updateDetailTable(cache->defectDetails);
@@ -397,20 +402,17 @@ void Defect_Data_Display::onTabChanged(int index)
             }
             break;
         }
-        case 7: {  // TAB_LOCATION_ABNORMAL
-            qDebug() << "=== Index 7: Location Abnormal - LOADING DATA ===";
+        case 6: {
+            qDebug() << "=== Switching to Location Abnormal tab (index 6) ===";
             CachedTabData* cache = &m_locationAbnormalCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
-                qDebug() << "Using cache, calling updateLocationAbnormalChart";
                 updateLocationAbnormalChart(m_locationAbnormalData);
             } else {
-                qDebug() << "Cache invalid, calling loadLocationAbnormalDataAsync";
                 loadLocationAbnormalDataAsync(timeRange);
             }
             break;
         }
         default:
-            qDebug() << "Unknown index:" << index;
             break;
         }
     });
@@ -424,7 +426,7 @@ void Defect_Data_Display::updateDateTime()
 void Defect_Data_Display::setupCharts()
 {
     // Create 4 separate charts for each platform
-    QStringList platformNames = {"工位一", "工位二", "工位三", "工位四"};
+    QStringList platformNames = {"��λһ", "��λ��", "��λ��", "��λ��"};
     QList<QColor> platformColors = {
         QColor(0, 255, 136),    // P0 - Green
         QColor(255, 200, 0),    // P1 - Yellow
@@ -869,11 +871,11 @@ void Defect_Data_Display::onDataLoaded_InspectionTrend(const QMap<QString, QPair
 
 QString Defect_Data_Display::getTimeFilterClause(const QString& timeRange)
 {
-    if (timeRange == "按小时") {
+    if (timeRange == "��Сʱ") {
         return "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
-    } else if (timeRange == "按天") {
+    } else if (timeRange == "����") {
         return "DATE_FORMAT(StartTime, '%Y-%m-%d')";
-    } else if (timeRange == "按月") {
+    } else if (timeRange == "����") {
         return "DATE_FORMAT(StartTime, '%Y-%m')";
     }
     return "DATE_FORMAT(StartTime, '%Y-%m-%d')";
@@ -881,15 +883,15 @@ QString Defect_Data_Display::getTimeFilterClause(const QString& timeRange)
 
 QString Defect_Data_Display::getDateTimeRange(const QString& timeRange)
 {
-    if (timeRange == "按小时") {
+    if (timeRange == "��Сʱ") {
         return QString("StartTime >= '%1 00:00:00' AND StartTime <= '%1 23:59:59'")
             .arg(m_selectedDate.toString("yyyy-MM-dd"));
-    } else if (timeRange == "按天") {
+    } else if (timeRange == "����") {
         int year = m_selectedDate.year();
         int month = m_selectedDate.month();
         return QString("StartTime >= '%1-%2-01' AND StartTime < DATE_ADD('%1-%2-01', INTERVAL 1 MONTH)")
             .arg(year).arg(month, 2, 10, QChar('0'));
-    } else if (timeRange == "按月") {
+    } else if (timeRange == "����") {
         int year = m_selectedDate.year();
         return QString("StartTime >= '%1-01-01' AND StartTime < '%2-01-01'")
             .arg(year).arg(year + 1);
@@ -928,14 +930,14 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
     }
 
     QMap<QString, QColor> defectColors;
-    defectColors["BlackDot"] = QColor(100, 100, 100);
-    defectColors["BrightDot"] = QColor(255, 180, 0);
-    defectColors["Line"] = QColor(0, 150, 255);
-    defectColors["Mura"] = QColor(255, 80, 80);
-    defectColors["Block"] = QColor(80, 200, 120);
-    defectColors["Bubble"] = QColor(180, 100, 255);
-    defectColors["Dent"] = QColor(255, 200, 150);
-    defectColors["Scratch"] = QColor(100, 255, 255);
+    defectColors["BlackDot"] = QColor(255, 87, 87);      // Coral Red
+    defectColors["BrightDot"] = QColor(255, 215, 0);      // Gold
+    defectColors["Line"] = QColor(0, 191, 255);           // Deep Sky Blue
+    defectColors["Mura"] = QColor(138, 43, 226);          // Blue Violet
+    defectColors["Block"] = QColor(50, 205, 50);           // Lime Green
+    defectColors["Bubble"] = QColor(255, 105, 180);        // Hot Pink
+    defectColors["Dent"] = QColor(255, 165, 0);           // Orange
+    defectColors["Scratch"] = QColor(0, 255, 255);        // Cyan
 
     QBarSeries* series = new QBarSeries();
     series->setLabelsVisible(true);
@@ -1002,14 +1004,14 @@ void Defect_Data_Display::updateDefectMappingChart(const QList<QPair<int, int>>&
     }
 
     QMap<QString, QColor> defectColors;
-    defectColors["BlackDot"] = QColor(100, 100, 100);
-    defectColors["BrightDot"] = QColor(255, 180, 0);
-    defectColors["Line"] = QColor(0, 150, 255);
-    defectColors["Mura"] = QColor(255, 80, 80);
-    defectColors["Block"] = QColor(80, 200, 120);
-    defectColors["Bubble"] = QColor(180, 100, 255);
-    defectColors["Dent"] = QColor(255, 200, 150);
-    defectColors["Scratch"] = QColor(100, 255, 255);
+    defectColors["BlackDot"] = QColor(255, 87, 87);      // Coral Red
+    defectColors["BrightDot"] = QColor(255, 215, 0);    // Gold
+    defectColors["Line"] = QColor(0, 191, 255);         // Deep Sky Blue
+    defectColors["Mura"] = QColor(138, 43, 226);         // Blue Violet
+    defectColors["Block"] = QColor(50, 205, 50);          // Lime Green
+    defectColors["Bubble"] = QColor(255, 105, 180);       // Hot Pink
+    defectColors["Dent"] = QColor(255, 165, 0);           // Orange
+    defectColors["Scratch"] = QColor(0, 255, 255);        // Cyan
 
     QMap<QString, QScatterSeries*> seriesMap;
 
@@ -1211,13 +1213,13 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     for (auto it = trendData.constBegin(); it != trendData.constEnd(); ++it) {
         QString label = it.key();
         // Format label based on time range
-        if (timeRange == "按小时") {
+        if (timeRange == "��Сʱ") {
             // Extract hour from "2026-05-22 00:00"
             if (label.contains(" ")) {
                 QString timePart = label.split(" ").at(1);
                 label = timePart.left(5);  // Get "HH:00"
             }
-        } else if (timeRange == "按天") {
+        } else if (timeRange == "����") {
             // Show only day "2026-05-22" -> "22"
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
@@ -1226,7 +1228,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
                 }
             }
         }
-        // 按月: keep as "2026-05"
+        // ����: keep as "2026-05"
         categories.append(label);
         defectSeries->append(index++, it.value().first);
     }
@@ -1356,14 +1358,14 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
 
     // Define colors for each defect type - high contrast palette
     QMap<QString, QColor> defectColors;
-    defectColors["BlackDot"] = QColor(220, 60, 60);     // Bright Red
-    defectColors["BrightDot"] = QColor(255, 180, 0);    // Vivid Orange
-    defectColors["Line"] = QColor(0, 200, 255);         // Cyan Blue
-    defectColors["Mura"] = QColor(80, 255, 100);        // Lime Green
-    defectColors["Block"] = QColor(255, 100, 200);      // Pink
-    defectColors["Bubble"] = QColor(180, 100, 255);     // Purple
-    defectColors["Dent"] = QColor(255, 220, 80);        // Yellow
-    defectColors["Scratch"] = QColor(100, 255, 255);    // Bright Cyan
+    defectColors["BlackDot"] = QColor(255, 87, 87);      // Coral Red
+    defectColors["BrightDot"] = QColor(255, 215, 0);      // Gold
+    defectColors["Line"] = QColor(0, 191, 255);           // Deep Sky Blue
+    defectColors["Mura"] = QColor(138, 43, 226);          // Blue Violet
+    defectColors["Block"] = QColor(50, 205, 50);           // Lime Green
+    defectColors["Bubble"] = QColor(255, 105, 180);        // Hot Pink
+    defectColors["Dent"] = QColor(255, 165, 0);           // Orange
+    defectColors["Scratch"] = QColor(0, 255, 255);        // Cyan
 
     for (auto it = defectCountByType.constBegin(); it != defectCountByType.constEnd(); ++it) {
         QString defectType = it.key();
@@ -1484,12 +1486,12 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
     for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
         QString label = it.key();
         // Format label based on time range
-        if (timeRange == "按小时") {
+        if (timeRange == "��Сʱ") {
             if (label.contains(" ")) {
                 QString timePart = label.split(" ").at(1);
                 label = timePart.left(5);
             }
-        } else if (timeRange == "按天") {
+        } else if (timeRange == "����") {
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
                 if (parts.size() >= 3) {
@@ -1497,12 +1499,12 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
                 }
             }
         }
-        // 按月: keep as is
+        // ����: keep as is
         timeCategories.append(label);
     }
 
     // Sort time categories properly
-    if (timeRange == "按小时" || timeRange == "按天") {
+    if (timeRange == "��Сʱ" || timeRange == "����") {
         std::sort(timeCategories.begin(), timeCategories.end(), [](const QString& a, const QString& b) {
             return a.toInt() < b.toInt();
         });
@@ -1516,7 +1518,7 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
         QColor(255, 100, 100)   // P3 - Red
     };
 
-    QStringList platformNames = {"工位一", "工位二", "工位三", "工位四"};
+    QStringList platformNames = {"��λһ", "��λ��", "��λ��", "��λ��"};
 
     // Create chart for each platform
     void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
@@ -1539,19 +1541,19 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
             QString originalKey;
             for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
                 QString label = it.key();
-                if (timeRange == "按小时" && label.contains(" ")) {
+                if (timeRange == "��Сʱ" && label.contains(" ")) {
                     QString timePart = label.split(" ").at(1);
                     if (timePart.left(5) == timeKey) {
                         originalKey = it.key();
                         break;
                     }
-                } else if (timeRange == "按天" && label.contains("-")) {
+                } else if (timeRange == "����" && label.contains("-")) {
                     QStringList parts = label.split("-");
                     if (parts.size() >= 3 && parts.at(2) == timeKey) {
                         originalKey = it.key();
                         break;
                     }
-                } else if (timeRange == "按月" && label == timeKey) {
+                } else if (timeRange == "����" && label == timeKey) {
                     originalKey = it.key();
                     break;
                 }
@@ -1598,19 +1600,19 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
             QString originalKey;
             for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
                 QString label = it.key();
-                if (timeRange == "按小时" && label.contains(" ")) {
+                if (timeRange == "��Сʱ" && label.contains(" ")) {
                     QString timePart = label.split(" ").at(1);
                     if (timePart.left(5) == timeKey) {
                         originalKey = it.key();
                         break;
                     }
-                } else if (timeRange == "按天" && label.contains("-")) {
+                } else if (timeRange == "����" && label.contains("-")) {
                     QStringList parts = label.split("-");
                     if (parts.size() >= 3 && parts.at(2) == timeKey) {
                         originalKey = it.key();
                         break;
                     }
-                } else if (timeRange == "按月" && label == timeKey) {
+                } else if (timeRange == "����" && label == timeKey) {
                     originalKey = it.key();
                     break;
                 }
@@ -1658,14 +1660,14 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
     QString timeRange = ui.comboTimeRange->currentText();
     QStringList timeCategories;
     QMap<QString, QColor> defectColors;
-    defectColors["BlackDot"] = QColor(100, 100, 100);
-    defectColors["BrightDot"] = QColor(255, 180, 0);
-    defectColors["Line"] = QColor(0, 150, 255);
-    defectColors["Mura"] = QColor(255, 80, 80);
-    defectColors["Block"] = QColor(80, 200, 120);
-    defectColors["Bubble"] = QColor(180, 100, 255);
-    defectColors["Dent"] = QColor(255, 200, 150);
-    defectColors["Scratch"] = QColor(100, 255, 255);
+    defectColors["BlackDot"] = QColor(255, 87, 87);      // Coral Red
+    defectColors["BrightDot"] = QColor(255, 215, 0);    // Gold
+    defectColors["Line"] = QColor(0, 191, 255);         // Deep Sky Blue
+    defectColors["Mura"] = QColor(138, 43, 226);         // Blue Violet
+    defectColors["Block"] = QColor(50, 205, 50);          // Lime Green
+    defectColors["Bubble"] = QColor(255, 105, 180);       // Hot Pink
+    defectColors["Dent"] = QColor(255, 165, 0);           // Orange
+    defectColors["Scratch"] = QColor(0, 255, 255);        // Cyan
 
     // Create a line series for each defect type
     QMap<QString, QLineSeries*> seriesMap;
@@ -1685,12 +1687,12 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
     for (auto it = defectTrendData.constBegin(); it != defectTrendData.constEnd(); ++it) {
         QString label = it.key();
         // Format label
-        if (timeRange == "按小时") {
+        if (timeRange == "��Сʱ") {
             if (label.contains(" ")) {
                 QString timePart = label.split(" ").at(1);
                 label = timePart.left(5);
             }
-        } else if (timeRange == "按天") {
+        } else if (timeRange == "����") {
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
                 if (parts.size() >= 3) {
@@ -1780,12 +1782,12 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
     for (auto it = inspectionTrendData.constBegin(); it != inspectionTrendData.constEnd(); ++it) {
         QString label = it.key();
         // Format label
-        if (timeRange == "按小时") {
+        if (timeRange == "��Сʱ") {
             if (label.contains(" ")) {
                 QString timePart = label.split(" ").at(1);
                 label = timePart.left(5);
             }
-        } else if (timeRange == "按天") {
+        } else if (timeRange == "����") {
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
                 if (parts.size() >= 3) {
@@ -1793,7 +1795,7 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
                 }
             }
         }
-        // 按月: keep as is
+        // ����: keep as is
         timeCategories.append(label);
 
         *passSet << it.value().first;
@@ -1903,9 +1905,9 @@ void DataLoaderThread::run()
 
     // Get time format based on time range
     QString timeFormat;
-    if (m_timeRange == "按小时") {
+    if (m_timeRange == "��Сʱ") {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
-    } else if (m_timeRange == "按天") {
+    } else if (m_timeRange == "����") {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d')";
     } else {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
@@ -2252,9 +2254,9 @@ void TabDataLoaderThread::run()
     }
     else if (m_tabIndex == 4) {
         QString timeFormat;
-        if (m_timeRange == "按小时") {
+        if (m_timeRange == "��Сʱ") {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
-        } else if (m_timeRange == "按天") {
+        } else if (m_timeRange == "����") {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d')";
         } else {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
@@ -2330,7 +2332,7 @@ void TabDataLoaderThread::run()
             qDebug() << "Detail query failed:" << query.lastError().text();
         }
     }
-    else if (m_tabIndex == 7) {  // TAB_LOCATION_ABNORMAL
+    else if (m_tabIndex == 7) {
         QString timeFormat;
         if (m_timeRange == "按小时") {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
@@ -2340,7 +2342,6 @@ void TabDataLoaderThread::run()
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
         }
 
-        // Query for "定位异常" status grouped by time period and MarkID (1-16)
         QString queryStr = QString(R"(
             SELECT
                 %1 as time_period,
@@ -2383,7 +2384,9 @@ void TabDataLoaderThread::run()
 // Location Abnormal Tab Functions
 void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
 {
+    qDebug() << "=== loadLocationAbnormalData called ===" << timeRange;
     QString dateRange = getDateTimeRange(timeRange);
+    qDebug() << "Date range:" << dateRange;
     QString connectionString = "DRIVER={MySQL ODBC 5.3 ANSI Driver};"
                               "SERVER=localhost;"
                               "PORT=3306;"
@@ -2424,19 +2427,25 @@ void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
         ORDER BY time_period, MarkID
     )").arg(timeFormat).arg(dateRange);
 
+    qDebug() << "Executing query:" << queryStr;
+
     QSqlQuery query(db);
     query.setForwardOnly(true);
     query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
 
     if (query.exec(queryStr)) {
         QMap<QString, QMap<int, int>> abnormalByPeriod;
+        int rowCount = 0;
 
         while (query.next()) {
             QString period = query.value(0).toString();
             int markId = query.value(1).toInt();
             int count = query.value(2).toInt();
             abnormalByPeriod[period][markId] = count;
+            rowCount++;
         }
+        qDebug() << "Query returned" << rowCount << "rows";
+        qDebug() << "abnormalByPeriod keys:" << abnormalByPeriod.keys();
         onDataLoaded_LocationAbnormal(abnormalByPeriod);
     } else {
         qDebug() << "Location abnormal query failed:" << query.lastError().text();
@@ -2448,6 +2457,7 @@ void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
 
 void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange)
 {
+    qDebug() << "=== loadLocationAbnormalDataAsync called ===" << timeRange;
     if (m_isTabLoading) {
         if (m_tabWorkerThread) {
             m_tabWorkerThread->quit();
@@ -2462,7 +2472,7 @@ void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange
     ++m_currentLoadId;
     int thisLoadId = m_currentLoadId;
 
-    m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 7, timeRange,  // TAB_LOCATION_ABNORMAL
+    m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 7, timeRange,
         getDateTimeRange(timeRange), m_selectedDate, "", this);
     m_isTabLoading = true;
 
@@ -2481,6 +2491,11 @@ void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange
 
 void Defect_Data_Display::onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod)
 {
+    qDebug() << "=== onDataLoaded_LocationAbnormal called ===";
+    qDebug() << "Data periods count:" << abnormalByPeriod.keys().size();
+    qDebug() << "Time range:" << ui.comboTimeRange->currentText();
+    qDebug() << "Selected date:" << m_selectedDate;
+
     m_locationAbnormalData = abnormalByPeriod;
 
     // Update cache
@@ -2488,34 +2503,56 @@ void Defect_Data_Display::onDataLoaded_LocationAbnormal(const QMap<QString, QMap
     m_locationAbnormalCache.timeRange = ui.comboTimeRange->currentText();
     m_locationAbnormalCache.date = m_selectedDate;
 
+    // Reset to first page
+    m_locationAbnormalCurrentPage = 1;
+
     updateLocationAbnormalChart(abnormalByPeriod);
 }
 
 void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<int, int>>& abnormalByPeriod)
 {
     qDebug() << "=== updateLocationAbnormalChart called ===";
-    qDebug() << "Data periods count:" << abnormalByPeriod.keys().size();
-    qDebug() << "Time range:" << ui.comboTimeRange->currentText();
-    qDebug() << "Selected date:" << m_selectedDate;
+    qDebug() << "abnormalByPeriod keys:" << abnormalByPeriod.keys();
 
-    // Clear existing content in all frames
-    QList<QFrame*> frames = {
-        ui.chartLocationAbnormalFrame1,
-        ui.chartLocationAbnormalFrame2,
-        ui.chartLocationAbnormalFrame3,
-        ui.chartLocationAbnormalFrame4
-    };
-    for (QFrame* frame : frames) {
-        if (QLayout* existingLayout = frame->layout()) {
-            QLayoutItem* item;
-            while ((item = existingLayout->takeAt(0)) != nullptr) {
-                delete item->widget();
-                delete item;
-            }
+    // Clear existing content (use Frame widgets)
+    QLayout* existingLayout1 = ui.chartLocationAbnormalFrame1->layout();
+    if (existingLayout1) {
+        QLayoutItem* item;
+        while ((item = existingLayout1->takeAt(0)) != nullptr) {
+            delete item->widget();
+            delete item;
+        }
+    }
+
+    QLayout* existingLayout2 = ui.chartLocationAbnormalFrame2->layout();
+    if (existingLayout2) {
+        QLayoutItem* item;
+        while ((item = existingLayout2->takeAt(0)) != nullptr) {
+            delete item->widget();
+            delete item;
+        }
+    }
+
+    QLayout* existingLayout3 = ui.chartLocationAbnormalFrame3->layout();
+    if (existingLayout3) {
+        QLayoutItem* item;
+        while ((item = existingLayout3->takeAt(0)) != nullptr) {
+            delete item->widget();
+            delete item;
+        }
+    }
+
+    QLayout* existingLayout4 = ui.chartLocationAbnormalFrame4->layout();
+    if (existingLayout4) {
+        QLayoutItem* item;
+        while ((item = existingLayout4->takeAt(0)) != nullptr) {
+            delete item->widget();
+            delete item;
         }
     }
 
     QString timeRange = ui.comboTimeRange->currentText();
+    qDebug() << "Time range:" << timeRange;
 
     // Generate time periods based on time range type
     QList<QString> periods;
@@ -2528,8 +2565,10 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
         periods = abnormalByPeriod.keys();
         std::sort(periods.begin(), periods.end());
     }
+    qDebug() << "Generated periods count:" << periods.size();
+    qDebug() << "First 3 periods:" << periods.mid(0, 3);
 
-    // Colors for bars - distinct colors for each time period
+    // Colors for bars
     QList<QColor> barColors;
     barColors << QColor(0, 200, 255) << QColor(255, 100, 100) << QColor(100, 255, 150)
               << QColor(255, 200, 0) << QColor(200, 100, 255) << QColor(100, 200, 200)
@@ -2540,120 +2579,127 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
               << QColor(150, 150, 255) << QColor(255, 150, 150) << QColor(150, 255, 150)
               << QColor(255, 255, 100) << QColor(255, 150, 255) << QColor(150, 255, 255);
 
-    // Process each page (4 platforms per page)
-    for (int page = 0; page < 4; ++page) {
-        QFrame* frame = frames[page];
-        int startMarkId = page * 4 + 1;  // 1, 5, 9, 13
+    // Create layouts for 4 pages (use Frame widgets, not Page widgets)
+    QVBoxLayout* layoutPage1 = new QVBoxLayout(ui.chartLocationAbnormalFrame1);
+    QVBoxLayout* layoutPage2 = new QVBoxLayout(ui.chartLocationAbnormalFrame2);
+    QVBoxLayout* layoutPage3 = new QVBoxLayout(ui.chartLocationAbnormalFrame3);
+    QVBoxLayout* layoutPage4 = new QVBoxLayout(ui.chartLocationAbnormalFrame4);
 
-        // Create container with vertical layout
-        QWidget* container = new QWidget();
-        container->setStyleSheet("background-color: #16213e; border-radius: 8px;");
-        QVBoxLayout* mainLayout = new QVBoxLayout(container);
-        mainLayout->setSpacing(10);
-        mainLayout->setContentsMargins(10, 10, 10, 10);
+    // Create charts for 16 platforms (4 per page, vertical layout)
+    for (int markId = 1; markId <= 16; ++markId) {
+        QBarSeries* barSeries = new QBarSeries();
+        barSeries->setLabelsVisible(true);
+        barSeries->setLabelsFormat("@value");
+        barSeries->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
 
-        // Create 4 charts in vertical layout (4x1)
-        QVBoxLayout* vLayout = new QVBoxLayout();
-        vLayout->setSpacing(10);
+        QStringList categories;
+        int maxCategories = timeRange == "按小时" ? 24 : 12;
 
-        for (int i = 0; i < 4; ++i) {
-            int markId = startMarkId + i;
+        for (int i = 0; i < periods.size() && i < maxCategories; ++i) {
+            QString period = periods[i];
+            int count = abnormalByPeriod.value(period).value(markId, 0);
 
-            // Create bar series for this platform
-            QBarSeries* barSeries = new QBarSeries();
-            barSeries->setLabelsVisible(true);
-            barSeries->setLabelsFormat("@value");
-            barSeries->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
+            QBarSet* barSet = new QBarSet("");
+            *barSet << count;
+            barSet->setColor(barColors.value(i, Qt::gray));
+            barSet->setLabelColor(QColor(234, 234, 234));
+            barSeries->append(barSet);
 
-            QStringList categories;
-            int maxCategories = timeRange == "按小时" ? 24 : 12;
-
-            for (int j = 0; j < periods.size() && j < maxCategories; ++j) {
-                QString period = periods[j];
-                int count = abnormalByPeriod.value(period).value(markId, 0);
-
-                QBarSet* barSet = new QBarSet("");
-                *barSet << count;
-                barSet->setColor(barColors.value(j, Qt::gray));
-                barSet->setLabelColor(QColor(234, 234, 234));
-                barSeries->append(barSet);
-
-                QString shortLabel;
-                if (period.contains(":")) {
-                    shortLabel = period.mid(period.lastIndexOf(" ") + 1, 2);
-                } else if (period.contains("-")) {
-                    QStringList parts = period.split("-");
-                    if (parts.size() >= 3) {
-                        QString month = parts[1];
-                        QString day = parts[2];
-                        if (period.length() <= 7) {
-                            shortLabel = month + "/" + day;
-                        } else {
-                            shortLabel = day;
-                        }
-                    }
+            QString shortLabel;
+            if (period.contains(":")) {
+                shortLabel = period.mid(period.lastIndexOf(" ") + 1, 2);
+            } else if (period.contains("-")) {
+                QStringList parts = period.split("-");
+                if (parts.size() >= 3) {
+                    shortLabel = parts[1] + "/" + parts[2];
                 }
-                categories << shortLabel;
             }
-
-            // Create chart
-            QChart* chart = new QChart();
-            chart->addSeries(barSeries);
-            chart->setTitle(QString("工位 %1").arg(markId));
-            chart->setAnimationOptions(QChart::NoAnimation);
-            chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
-            chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
-            chart->legend()->setVisible(false);
-
-            // Add axes
-            QBarCategoryAxis* axisX = new QBarCategoryAxis();
-            axisX->append(categories);
-            axisX->setLabelsColor(QColor(234, 234, 234));
-            axisX->setLabelsFont(QFont("Arial", 7));
-            chart->addAxis(axisX, Qt::AlignBottom);
-
-            int maxValue = 0;
-            for (int j = 0; j < periods.size() && j < maxCategories; ++j) {
-                int count = abnormalByPeriod.value(periods[j]).value(markId, 0);
-                if (count > maxValue) maxValue = count;
-            }
-            qDebug() << "MarkId:" << markId << "maxValue:" << maxValue << "-> Y-axis max:" << (maxValue == 0 ? 10 : maxValue * 3.0);
-
-            QValueAxis* axisY = new QValueAxis();
-            axisY->setLabelFormat("%d");
-            axisY->setLabelsColor(QColor(234, 234, 234));
-            axisY->setLabelsFont(QFont("Arial", 8));
-            axisY->setGridLineVisible(true);
-            axisY->setMinorGridLineVisible(false);
-            if (maxValue == 0) {
-                axisY->setRange(0, 10);
-            } else {
-                axisY->setRange(0, maxValue * 3.0);
-            }
-            axisY->applyNiceNumbers();
-            chart->addAxis(axisY, Qt::AlignLeft);
-            barSeries->attachAxis(axisY);
-
-            // Create chart view
-            QChartView* chartView = new QChartView(chart);
-            chartView->setRenderHint(QPainter::Antialiasing);
-            chartView->setMinimumHeight(120);
-            chartView->setMaximumHeight(150);
-
-            vLayout->addWidget(chartView);
+            categories << shortLabel;
         }
 
-        mainLayout->addLayout(vLayout);
+        QChart* chart = new QChart();
+        chart->addSeries(barSeries);
+        chart->setTitle(QString("工位 %1").arg(markId));
+        chart->setAnimationOptions(QChart::NoAnimation);
+        chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+        chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
+        chart->legend()->setVisible(false);
 
-        // Set layout to frame
-        QVBoxLayout* wrapperLayout = new QVBoxLayout(frame);
-        wrapperLayout->setContentsMargins(0, 0, 0, 0);
-        wrapperLayout->addWidget(container);
+        QBarCategoryAxis* axisX = new QBarCategoryAxis();
+        axisX->append(categories);
+        axisX->setLabelsColor(QColor(234, 234, 234));
+        axisX->setLabelsFont(QFont("Arial", 7));
+        chart->addAxis(axisX, Qt::AlignBottom);
+
+        // Calculate Y-axis max with padding for labels above bars
+        QValueAxis* axisY = new QValueAxis();
+        axisY->setLabelFormat("%d");
+        axisY->setLabelsColor(QColor(234, 234, 234));
+        axisY->setLabelsFont(QFont("Arial", 8));
+        int maxValue = 0;
+        for (int i = 0; i < periods.size() && i < maxCategories; ++i) {
+            int count = abnormalByPeriod.value(periods[i]).value(markId, 0);
+            if (count > maxValue) maxValue = count;
+        }
+        qDebug() << "MarkId:" << markId << "maxValue:" << maxValue << "Y轴范围:" << (maxValue == 0 ? 10 : maxValue * 3.0);
+        if (maxValue == 0) {
+            axisY->setRange(0, 10);
+        } else {
+            axisY->setRange(0, maxValue * 3.0);
+        }
+        chart->addAxis(axisY, Qt::AlignLeft);
+
+        QChartView* chartView = new QChartView(chart);
+        chartView->setRenderHint(QPainter::Antialiasing);
+        chartView->setMinimumSize(600, 120);
+        chartView->setMaximumSize(800, 150);
+
+        // Add to appropriate page (4x1 vertical)
+        if (markId >= 1 && markId <= 4) {
+            layoutPage1->addWidget(chartView);
+        } else if (markId >= 5 && markId <= 8) {
+            layoutPage2->addWidget(chartView);
+        } else if (markId >= 9 && markId <= 12) {
+            layoutPage3->addWidget(chartView);
+        } else {
+            layoutPage4->addWidget(chartView);
+        }
     }
 
-    // Update cache
+    updateLocationAbnormalPageDisplay();
+
     m_locationAbnormalCache.timestamp = QDateTime::currentMSecsSinceEpoch();
     m_locationAbnormalCache.timeRange = ui.comboTimeRange->currentText();
     m_locationAbnormalCache.date = m_selectedDate;
+}
+
+void Defect_Data_Display::onPrevPageClicked()
+{
+    if (m_locationAbnormalCurrentPage > 1) {
+        m_locationAbnormalCurrentPage--;
+        updateLocationAbnormalPageDisplay();
+    }
+}
+
+void Defect_Data_Display::onNextPageClicked()
+{
+    if (m_locationAbnormalCurrentPage < 4) {
+        m_locationAbnormalCurrentPage++;
+        updateLocationAbnormalPageDisplay();
+    }
+}
+
+void Defect_Data_Display::updateLocationAbnormalPageDisplay()
+{
+    // Show/hide the Frame widgets (not the Page widgets which are tabs)
+    ui.chartLocationAbnormalFrame1->setVisible(m_locationAbnormalCurrentPage == 1);
+    ui.chartLocationAbnormalFrame2->setVisible(m_locationAbnormalCurrentPage == 2);
+    ui.chartLocationAbnormalFrame3->setVisible(m_locationAbnormalCurrentPage == 3);
+    ui.chartLocationAbnormalFrame4->setVisible(m_locationAbnormalCurrentPage == 4);
+    // Switch the tab to the current page
+    ui.tabLocationAbnormalPages->setCurrentIndex(m_locationAbnormalCurrentPage - 1);
+    ui.labelPageInfo->setText(QString("第 %1 / 4 页").arg(m_locationAbnormalCurrentPage));
+    ui.btnPrevPage->setEnabled(m_locationAbnormalCurrentPage > 1);
+    ui.btnNextPage->setEnabled(m_locationAbnormalCurrentPage < 4);
 }
 
