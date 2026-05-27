@@ -744,7 +744,7 @@ QWidget#centralWidget {
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>300</height>
+            <height>180</height>
            </size>
           </property>
           <property name="styleSheet">
@@ -763,8 +763,14 @@ QFrame {
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>450</height>
+            <height>570</height>
            </size>
+          </property>
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>1</verstretch>
+           </sizepolicy>
           </property>
           <property name="styleSheet">
            <string>
