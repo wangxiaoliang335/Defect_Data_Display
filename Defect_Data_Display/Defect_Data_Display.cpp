@@ -407,22 +407,18 @@ bool Defect_Data_Display::connectToDatabase()
 
 void Defect_Data_Display::onRefreshClicked()
 {
-    if (m_isLoading) {
-        qDebug() << "Already loading, skipping";
-        return;
-    }
-
     qDebug() << "=== onRefreshClicked called ===";
     qDebug() << "m_isLoading:" << m_isLoading;
 
     // Clear all charts to show empty state
     clearAllCharts();
 
-    // Disable time range combo and date edit while loading
+    // Disable refresh button and time controls while loading
+    ui.btnRefresh->setEnabled(false);
     ui.comboTimeRange->setEnabled(false);
     ui.dateEdit->setEnabled(false);
 
-    // First, ensure any existing thread is fully cleaned up
+    // Cancel any existing loading
     if (m_workerThread) {
         m_workerThread->quit();
         m_workerThread->wait(200);
@@ -432,6 +428,9 @@ void Defect_Data_Display::onRefreshClicked()
         delete m_workerThread;
         m_workerThread = nullptr;
     }
+
+    // Reset loading state to allow new load
+    m_isLoading = false;
 
     QString timeRange = ui.comboTimeRange->currentText();
     qDebug() << "Time range:" << timeRange;
