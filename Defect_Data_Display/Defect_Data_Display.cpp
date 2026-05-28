@@ -3005,6 +3005,10 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
         for (int d = 1; d <= daysInMonth; ++d) {
             periods << QString("%1-%2").arg(m_selectedDate.toString("yyyy-MM")).arg(d, 2, 10, QChar('0'));
         }
+    } else if (timeRange == "按月") {
+        for (int m = 1; m <= 12; ++m) {
+            periods << QString("%1-%2").arg(m_selectedDate.year()).arg(m, 2, 10, QChar('0'));
+        }
     } else {
         periods = abnormalByPeriod.keys();
         std::sort(periods.begin(), periods.end());
