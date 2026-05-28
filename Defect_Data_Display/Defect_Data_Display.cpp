@@ -1139,7 +1139,7 @@ void Defect_Data_Display::updateStats(int totalInspect, int passCount, int failC
         ui.statValue4->setStyleSheet("color: #ff4444; font-size: 32px; font-weight: bold;");
     }
 
-    ui.statValue5->setText(QString::number(totalDefects));
+    //ui.statValue5->setText(QString::number(totalDefects));
 }
 
 void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<QString, int>>>& defectByType)
