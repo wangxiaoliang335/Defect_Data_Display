@@ -22,6 +22,9 @@
 #include <QMutex>
 #include <QChartView>
 #include <QTableWidget>
+#include <QtCharts/QStackedBarSeries>
+#include <QtCharts/QBarSeries>
+#include <QtCharts/QBarSet>
 #include "ui_Defect_Data_Display.h"
 
 class DataLoaderThread;
@@ -51,6 +54,8 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void showPlatformChartTooltip(QChartView* chartView, int platformIdx, const QPoint& viewportPos, const QPointF& chartPos);
 
 private slots:
     void onRefreshClicked();
@@ -74,6 +79,7 @@ private slots:
 
     // New slots for time-based trend data
     void onDataLoaded_PlatformTrend(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData, const QString& timeRange);
+    void onDataLoaded_PlatformAoiResult(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories, const QString& timeRange);
     void onDataLoaded_DefectTrend(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange);
     void onDataLoaded_InspectionTrend(const QMap<QString, QPair<int, int>>& inspectionTrendData, const QString& timeRange);
 
@@ -117,9 +123,11 @@ private:
 
     // New member variables for time-based trend data
     QMap<QString, QMap<int, QPair<int, int>>> m_platformTrendData;  // time_period -> platform_id -> (pass, fail)
+    QMap<QString, QMap<int, QMap<QString, int>>> m_platformAoiResultData;  // time_period -> platform_id -> (AOIResult -> count) for stacked chart
     QMap<QString, QMap<QString, int>> m_defectTrendData;            // time_period -> (defect_type -> count)
     QMap<QString, QPair<int, int>> m_inspectionTrendData;            // time_period -> (pass, fail)
     QString m_currentTimeFormat;  // Current time format for display
+    QStringList m_aoiResultCategories;  // AOIResult categories for stacked chart (e.g., "OK", "NG", "Rework")
 
     bool connectToDatabase();
     void startLoading(const QString& timeRange);
@@ -146,6 +154,7 @@ private:
 
     // New functions for time-based trend display
     void updatePlatformTrendChart(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData);
+    void updatePlatformTrendChartStacked(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories);
     void updateDefectTrendChart(const QMap<QString, QMap<QString, int>>& defectTrendData);
     void updateInspectionTrendChart(const QMap<QString, QPair<int, int>>& inspectionTrendData);
     void loadMainData(const QString& timeRange);
@@ -157,6 +166,7 @@ private:
     void onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count
     CachedTabData m_locationAbnormalCache;
+    QLabel* m_tooltipLabel;  // custom floating tooltip for platform charts
 };
 
 class DataLoaderThread : public QThread
@@ -181,6 +191,7 @@ signals:
 
     // New signals for time-based trend data
     void platformTrendLoaded(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData, const QString& timeRange);
+    void platformAoiResultLoaded(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories, const QString& timeRange);
     void defectTrendLoaded(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange);
     void inspectionTrendLoaded(const QMap<QString, QPair<int, int>>& inspectionTrendData, const QString& timeRange);
 

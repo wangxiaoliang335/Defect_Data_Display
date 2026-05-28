@@ -14,8 +14,12 @@
 #include <QTimer>
 #include <QMouseEvent>
 #include <QApplication>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QFont>
 #include <QHeaderView>
+#include <QToolTip>
+#include <QGraphicsSimpleTextItem>
 #include <algorithm>
 
 Defect_Data_Display::Defect_Data_Display(QWidget *parent)
@@ -42,6 +46,7 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_isLoading(false)
     , m_isTabLoading(false)
     , m_lastMainLoadTime(0)
+    , m_tooltipLabel(nullptr)
 {
     setWindowFlags(Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -52,6 +57,15 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     ui.dateEdit->setDisplayFormat("yyyy-MM-dd");
 
     setupCharts();
+
+    // Install event filter for chart tooltips
+    void* platformCharts[] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+    for (int i = 0; i < 4; ++i) {
+        QChartView* cv = (QChartView*)platformCharts[i];
+        cv->setMouseTracking(true);
+        cv->installEventFilter(this);
+        cv->viewport()->installEventFilter(this);
+    }
 
     connect(ui.btnRefresh, &QPushButton::clicked, this, &Defect_Data_Display::onRefreshClicked);
     connect(ui.comboTimeRange, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -186,6 +200,186 @@ void Defect_Data_Display::mouseReleaseEvent(QMouseEvent* event)
         m_isDragging = false;
     }
     QMainWindow::mouseReleaseEvent(event);
+}
+
+bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
+{
+    if (event->type() == QEvent::MouseMove) {
+        QMouseEvent* me = static_cast<QMouseEvent*>(event);
+        qDebug() << "[EVENT] MouseMove watched:" << watched << "pos:" << me->pos();
+        bool matched = false;
+        for (int p = 0; p < 4; ++p) {
+            void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+            QChartView* cv = (QChartView*)chartViewPtrs[p];
+            qDebug() << "[EVENT]  p=" << p << "cv:" << cv << "cv->viewport():" << (cv ? cv->viewport() : nullptr);
+            if (cv && (cv == watched || cv->viewport() == watched)) {
+                qDebug() << "[EVENT] Matched platform" << p;
+                // Convert viewport coordinates to chart coordinates using chart->mapToValue
+                QChart* chart = cv->chart();
+                QList<QAbstractSeries*> seriesList = chart->series();
+                if (!seriesList.isEmpty()) {
+                    QPointF chartPos = chart->mapToValue(QPointF(me->pos()), seriesList.first());
+                    showPlatformChartTooltip(cv, p, me->pos(), chartPos);
+                }
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            m_tooltipLabel->hide();
+        }
+    } else if (event->type() == QEvent::Leave) {
+        // Hide tooltip when mouse leaves a platform chart
+        for (int p = 0; p < 4; ++p) {
+            void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+            QChartView* cv = (QChartView*)chartViewPtrs[p];
+            if (cv && (cv == watched || cv->viewport() == watched)) {
+                m_tooltipLabel->hide();
+                break;
+            }
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int platformIdx, const QPoint& viewportPos, const QPointF& chartPos)
+{
+    QChart* chart = chartView->chart();
+    QList<QAbstractSeries*> allSeries = chart->series();
+    qDebug() << "[TOOLTIP] series count:" << allSeries.size();
+    if (allSeries.isEmpty()) { qDebug() << "[TOOLTIP] early return: no series"; return; }
+
+    QAbstractBarSeries* barSeries = qobject_cast<QAbstractBarSeries*>(allSeries.first());
+    qDebug() << "[TOOLTIP] barSeries:" << barSeries;
+    if (!barSeries) { qDebug() << "[TOOLTIP] early return: not bar series"; return; }
+
+    // Use plot area to determine position
+    QRectF plotArea = chart->plotArea();
+    qDebug() << "[TOOLTIP] viewportPos:" << viewportPos << "plotArea:" << plotArea;
+    
+    // Calculate position relative to plotArea using pixel coordinates
+    qreal relX = (viewportPos.x() - plotArea.left()) / plotArea.width();
+    qreal relY = (viewportPos.y() - plotArea.top()) / plotArea.height();
+    qDebug() << "[TOOLTIP] relX:" << relX << "relY:" << relY;
+    
+    // Only show tooltip if mouse is within the plot area
+    if (relX < 0 || relX > 1 || relY < 0 || relY > 1) {
+        qDebug() << "[TOOLTIP] mouse outside plot area";
+        return;
+    }
+
+    // Get categories from X axis
+    QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
+    if (axesX.isEmpty()) { qDebug() << "[TOOLTIP] no X axes"; return; }
+    QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
+    if (!axisX) { qDebug() << "[TOOLTIP] X axis not bar category"; return; }
+    QStringList categories = axisX->categories();
+    qDebug() << "[TOOLTIP] categories:" << categories;
+    if (categories.isEmpty()) { qDebug() << "[TOOLTIP] empty categories"; return; }
+
+    // Find bar index by position
+    int numCategories = categories.size();
+    int numBarSets = barSeries->count();
+    int totalBars = numCategories * numBarSets;
+    if (totalBars == 0) return;
+
+    int barIndex = static_cast<int>(relX * totalBars);
+    int categoryIndex = barIndex / qMax(numBarSets, 1);
+    if (categoryIndex < 0 || categoryIndex >= categories.size()) {
+        qDebug() << "[TOOLTIP] categoryIndex out of range:" << categoryIndex << "vs" << categories.size();
+        return;
+    }
+    QString timeKey = categories[categoryIndex];
+    qDebug() << "[TOOLTIP] categoryIndex:" << categoryIndex << "timeKey:" << timeKey;
+
+    // Map timeKey back to originalKey
+    QString timeRange = ui.comboTimeRange->currentText();
+    QString originalKey;
+    for (auto it = m_platformTrendData.constBegin(); it != m_platformTrendData.constEnd(); ++it) {
+        QString label = it.key();
+        if (timeRange == "按小时" && label.contains(" ")) {
+            if (label.split(" ").at(1).left(5) == timeKey) { originalKey = it.key(); break; }
+        } else if (timeRange == "按天" && label.contains("-")) {
+            QStringList parts = label.split("-");
+            if (parts.size() >= 3 && parts.at(2) == timeKey) { originalKey = it.key(); break; }
+        } else if (timeRange == "按月" && label == timeKey) {
+            originalKey = it.key();
+            break;
+        }
+    }
+
+    qDebug() << "[TOOLTIP] originalKey:" << originalKey << "m_platformTrendData.size():" << m_platformTrendData.size();
+    if (originalKey.isEmpty() || !m_platformTrendData.contains(originalKey)) { qDebug() << "[TOOLTIP] early return: no originalKey"; return; }
+    if (!m_platformTrendData[originalKey].contains(platformIdx)) { qDebug() << "[TOOLTIP] early return: no platformIdx" << platformIdx; return; }
+
+    int pass = m_platformTrendData[originalKey][platformIdx].first;
+    int fail = m_platformTrendData[originalKey][platformIdx].second;
+
+    // Build clean, readable tooltip
+    int total = pass + fail;
+    qDebug() << "[TOOLTIP] SHOWING TOOLTIP! total:" << total;
+
+    // Pass / Fail each on their own line
+    QString tipPassFail = QString(
+        "<div style='margin-bottom:12px;line-height:1.8'>"
+        "<div style='font-size:17px'><span style='color:#4ade80'>Pass : %1</span></div>"
+        "<div style='font-size:17px'><span style='color:#f87171'>Fail : %2</span></div>"
+        "</div>").arg(pass).arg(fail);
+
+    // AOI Result section - 显示 AOIResult 字段的各种值统计
+    QString section1;
+    if (!m_platformAoiResultData.isEmpty() && m_platformAoiResultData.contains(originalKey)
+        && m_platformAoiResultData[originalKey].contains(platformIdx)) {
+        const QMap<QString, int>& aoiMap = m_platformAoiResultData[originalKey][platformIdx];
+        for (auto ait = aoiMap.constBegin(); ait != aoiMap.constEnd(); ++ait) {
+            // 为不同类型设置不同颜色
+            QString color = "#f0f0f0";  // 默认白色
+            if (ait.key() == "OK") {
+                color = "#4ade80";  // 绿色
+            } else if (ait.key() == "NG") {
+                color = "#f87171";  // 红色
+            } else {
+                color = "#fbbf24";  // 黄色 - 其他类型
+            }
+            section1 += QString("<div style='font-size:15px'><span style='color:%1'>%2 : %3</span></div>").arg(color).arg(ait.key()).arg(ait.value());
+        }
+    }
+    QString tipBody1;
+    if (!section1.isEmpty()) {
+        tipBody1 = QString("<div style='margin-top:10px;line-height:1.6'>"
+                          "<div style='color:#00e5ff;font-size:15px;font-weight:bold;margin-bottom:8px'>AOI Result</div>"
+                          "%1"
+                          "</div>").arg(section1);
+    }
+
+    QString tip = QString(
+        "<div style='background:#1e2a3a;color:#fff;padding:20px 24px;border-radius:14px;"
+        "border:1px solid #3a4a5a;min-width:320px;font-family:Arial,sans-serif'>"
+        "<div style='border-bottom:1px solid #3a4a5a;padding-bottom:12px;margin-bottom:12px'>"
+        "<span style='font-size:16px;color:#aaaaaa'>Total : </span>"
+        "<span style='font-size:26px;font-weight:bold;color:#ffffff'>%1</span>"
+        "</div>"
+        "%2"
+        "%3"
+        "</div>"
+    ).arg(total).arg(tipPassFail).arg(tipBody1);
+
+    m_tooltipLabel->setText(tip);
+
+    // Position tooltip near the mouse, but keep it within the screen bounds
+    QPoint globalPos = chartView->viewport()->mapToGlobal(viewportPos);
+    int x = globalPos.x() + 16;
+    int y = globalPos.y() - 20;
+    QScreen* screen = QApplication::screenAt(globalPos);
+    if (screen) {
+        QRect screenGeo = screen->availableGeometry();
+        QSize tipSize = m_tooltipLabel->sizeHint();
+        if (x + tipSize.width() > screenGeo.right()) x = globalPos.x() - tipSize.width() - 16;
+        if (y < screenGeo.top()) y = screenGeo.top() + 4;
+        if (y + tipSize.height() > screenGeo.bottom()) y = screenGeo.bottom() - tipSize.height() - 4;
+    }
+    m_tooltipLabel->move(x, y);
+    m_tooltipLabel->show();
 }
 
 void Defect_Data_Display::onMinimizeClicked()
@@ -462,7 +656,7 @@ void Defect_Data_Display::setupCharts()
     chart0->setMargins(QMargins(0, 0, 0, 0));
     m_chartViewPlatform0 = new QChartView(chart0);
     ((QChartView*)m_chartViewPlatform0)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewPlatform0)->setMinimumHeight(170);
+    ((QChartView*)m_chartViewPlatform0)->setMinimumHeight(600);
     ((QChartView*)m_chartViewPlatform0)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     ((QChartView*)m_chartViewPlatform0)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     QVBoxLayout* layout0 = new QVBoxLayout(ui.chartPlatform0);
@@ -482,7 +676,7 @@ void Defect_Data_Display::setupCharts()
     chart1->setMargins(QMargins(0, 0, 0, 0));
     m_chartViewPlatform1 = new QChartView(chart1);
     ((QChartView*)m_chartViewPlatform1)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewPlatform1)->setMinimumHeight(170);
+    ((QChartView*)m_chartViewPlatform1)->setMinimumHeight(600);
     ((QChartView*)m_chartViewPlatform1)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     ((QChartView*)m_chartViewPlatform1)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     QVBoxLayout* layout1 = new QVBoxLayout(ui.chartPlatform1);
@@ -502,7 +696,7 @@ void Defect_Data_Display::setupCharts()
     chart2->setMargins(QMargins(0, 0, 0, 0));
     m_chartViewPlatform2 = new QChartView(chart2);
     ((QChartView*)m_chartViewPlatform2)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewPlatform2)->setMinimumHeight(170);
+    ((QChartView*)m_chartViewPlatform2)->setMinimumHeight(600);
     ((QChartView*)m_chartViewPlatform2)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     ((QChartView*)m_chartViewPlatform2)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     QVBoxLayout* layout2 = new QVBoxLayout(ui.chartPlatform2);
@@ -522,7 +716,7 @@ void Defect_Data_Display::setupCharts()
     chart3->setMargins(QMargins(0, 0, 0, 0));
     m_chartViewPlatform3 = new QChartView(chart3);
     ((QChartView*)m_chartViewPlatform3)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewPlatform3)->setMinimumHeight(170);
+    ((QChartView*)m_chartViewPlatform3)->setMinimumHeight(600);
     ((QChartView*)m_chartViewPlatform3)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     ((QChartView*)m_chartViewPlatform3)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     QVBoxLayout* layout3 = new QVBoxLayout(ui.chartPlatform3);
@@ -629,6 +823,21 @@ void Defect_Data_Display::setupCharts()
     QVBoxLayout* layoutDefectRate = new QVBoxLayout(ui.chartDefectRate);
     layoutDefectRate->setContentsMargins(0, 0, 0, 0);
     layoutDefectRate->addWidget((QChartView*)m_chartViewDefectRate);
+
+    // Create custom floating tooltip label for platform charts
+    m_tooltipLabel = new QLabel(this);
+    m_tooltipLabel->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint);
+    m_tooltipLabel->setAlignment(Qt::AlignLeft);
+    m_tooltipLabel->setTextFormat(Qt::RichText);
+    m_tooltipLabel->setMargin(0);
+    m_tooltipLabel->setIndent(0);
+    m_tooltipLabel->setStyleSheet(R"(
+        background: rgba(20, 30, 50, 255);
+        border: 2px solid rgba(0, 200, 255, 200);
+        border-radius: 12px;
+        padding: 0px;
+    )");
+    m_tooltipLabel->hide();
 }
 
 bool Defect_Data_Display::connectToDatabase()
@@ -1639,7 +1848,7 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
             if (!originalKey.isEmpty() && platformTrendData.contains(originalKey)) {
                 const QMap<int, QPair<int, int>>& platformData = platformTrendData[originalKey];
                 if (platformData.contains(p)) {
-                    *failSet << platformData[p].second;
+                    *failSet << (platformData[p].first + platformData[p].second);
                 } else {
                     *failSet << 0;
                 }
@@ -1653,7 +1862,7 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
         series->setLabelsFormat("@value");
         series->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
         chart->addSeries(series);
-        chart->setTitle(platformNames[p] + " (" + timeRange + ") - Fail");
+        chart->setTitle(platformNames[p] + " (" + timeRange + ") - Total");
         chart->legend()->hide();
 
         QBarCategoryAxis* axisX = new QBarCategoryAxis();
@@ -1665,7 +1874,7 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
         chart->addAxis(axisX, Qt::AlignBottom);
 
         QValueAxis* axisY = new QValueAxis();
-        axisY->setTitleText("Fail Count");
+        axisY->setTitleText("Total");
         axisY->setLabelFormat("%d");
         axisY->setLabelsColor(QColor(234, 234, 234));
         QFont axisYFont = axisY->labelsFont();
@@ -1697,7 +1906,7 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
             if (!originalKey.isEmpty() && platformTrendData.contains(originalKey)) {
                 const QMap<int, QPair<int, int>>& platformData = platformTrendData[originalKey];
                 if (platformData.contains(p)) {
-                    int val = platformData[p].second;
+                    int val = platformData[p].first + platformData[p].second;
                     if (val > maxVal) maxVal = val;
                 }
             }
@@ -1707,6 +1916,163 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
 
         series->attachAxis(axisX);
         series->attachAxis(axisY);
+    }
+}
+
+void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories)
+{
+    if (platformAoiResultData.isEmpty() || aoiResultCategories.isEmpty()) {
+        if (!m_platformTrendData.isEmpty()) {
+            updatePlatformTrendChart(m_platformTrendData);
+        }
+        return;
+    }
+
+    QString timeRange = ui.comboTimeRange->currentText();
+
+    QStringList timeCategories;
+    for (auto it = platformAoiResultData.constBegin(); it != platformAoiResultData.constEnd(); ++it) {
+        QString label = it.key();
+        if (timeRange == "按小时" && label.contains(" ")) {
+            label = label.split(" ").at(1).left(5);
+        } else if (timeRange == "按天" && label.contains("-")) {
+            QStringList parts = label.split("-");
+            if (parts.size() >= 3) label = parts.at(2);
+        }
+        if (!timeCategories.contains(label)) timeCategories.append(label);
+    }
+    if (timeRange == "按小时" || timeRange == "按天") {
+        std::sort(timeCategories.begin(), timeCategories.end(), [](const QString& a, const QString& b) {
+            return a.toInt() < b.toInt();
+        });
+    }
+
+    QList<QColor> platformColors = {
+        QColor(0, 255, 136), QColor(255, 200, 0), QColor(0, 150, 255), QColor(255, 100, 100)
+    };
+    QList<QColor> resultColors;
+    resultColors << QColor(0, 255, 136) << QColor(255, 80, 80) << QColor(255, 200, 0)
+                << QColor(0, 150, 255) << QColor(200, 100, 255) << QColor(255, 150, 150)
+                << QColor(150, 200, 255) << QColor(200, 255, 150);
+    QStringList platformNames = {"工位一", "工位二", "工位三", "工位四"};
+
+    void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+
+    for (int p = 0; p < 4; ++p) {
+        QChartView* chartView = (QChartView*)chartViewPtrs[p];
+        QChart* chart = chartView->chart();
+        // Clear old text items from scene
+        if (chart->scene()) {
+            QList<QGraphicsItem*> items = chart->scene()->items();
+            for (QGraphicsItem* item : items) {
+                if (qgraphicsitem_cast<QGraphicsSimpleTextItem*>(item)) {
+                    chart->scene()->removeItem(item);
+                    delete item;
+                }
+            }
+        }
+
+        chart->removeAllSeries();
+        for (auto axis : chart->axes()) chart->removeAxis(axis);
+
+        QStackedBarSeries* stackedSeries = new QStackedBarSeries();
+        stackedSeries->setLabelsVisible(false);
+
+        QList<QBarSet*> barSets;
+        for (int i = 0; i < aoiResultCategories.size() && i < resultColors.size(); ++i) {
+            QBarSet* set = new QBarSet(aoiResultCategories[i]);
+            set->setColor(resultColors[i]);
+            set->setLabelColor(QColor(234, 234, 234));
+            barSets.append(set);
+        }
+
+        QList<int> columnTotals(timeCategories.size(), 0);
+
+        for (int ti = 0; ti < timeCategories.size(); ++ti) {
+            const QString& timeKey = timeCategories[ti];
+            QString originalKey;
+            for (auto it2 = platformAoiResultData.constBegin(); it2 != platformAoiResultData.constEnd(); ++it2) {
+                QString label = it2.key();
+                if (timeRange == "按小时" && label.contains(" ")) {
+                    if (label.split(" ").at(1).left(5) == timeKey) { originalKey = it2.key(); break; }
+                } else if (timeRange == "按天" && label.contains("-")) {
+                    QStringList parts = label.split("-");
+                    if (parts.size() >= 3 && parts.at(2) == timeKey) { originalKey = it2.key(); break; }
+                } else if (timeRange == "按月" && label == timeKey) {
+                    originalKey = it2.key(); break;
+                }
+            }
+
+            for (int i = 0; i < aoiResultCategories.size() && i < barSets.size(); ++i) {
+                int val = 0;
+                if (!originalKey.isEmpty() && platformAoiResultData.contains(originalKey)) {
+                    const QMap<QString, int>& resMap = platformAoiResultData[originalKey].value(p);
+                    val = resMap.value(aoiResultCategories[i], 0);
+                }
+                *barSets[i] << val;
+                columnTotals[ti] += val;
+            }
+        }
+
+        for (QBarSet* bs : barSets) stackedSeries->append(bs);
+        chart->addSeries(stackedSeries);
+        chart->setTitle(platformNames[p] + " (" + timeRange + ") - Total");
+        chart->legend()->hide();
+
+        QBarCategoryAxis* axisX = new QBarCategoryAxis();
+        axisX->append(timeCategories);
+        axisX->setLabelsColor(QColor(234, 234, 234));
+        QFont axisXFont = axisX->labelsFont();
+        axisXFont.setPointSize(10);
+        axisX->setLabelsFont(axisXFont);
+        chart->addAxis(axisX, Qt::AlignBottom);
+
+        int maxVal = 1;
+        for (int v : columnTotals) if (v > maxVal) maxVal = v;
+
+        QValueAxis* axisY = new QValueAxis();
+        axisY->setTitleText("Total");
+        axisY->setLabelFormat("%d");
+        axisY->setLabelsColor(QColor(234, 234, 234));
+        QFont axisYFont = axisY->labelsFont();
+        axisYFont.setPointSize(10);
+        axisY->setLabelsFont(axisYFont);
+        axisY->setTitleBrush(QBrush(platformColors[p]));
+        axisY->setRange(0, maxVal + maxVal * 0.2);
+        chart->addAxis(axisY, Qt::AlignLeft);
+
+        stackedSeries->attachAxis(axisX);
+        stackedSeries->attachAxis(axisY);
+
+        // Add total value text above each bar
+        if (!chart->scene()) continue;
+        for (int ti = 0; ti < timeCategories.size(); ++ti) {
+            if (columnTotals[ti] <= 0) continue;
+            int chartWidth = chartView->viewport()->width();
+            if (chartWidth <= 0) chartWidth = 400;
+            int categoryWidth = chartWidth / qMax(timeCategories.size(), 1);
+            qreal barCenterX = (ti + 0.5) * categoryWidth;
+            qreal barTopY = columnTotals[ti];
+
+            QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(QString::number(columnTotals[ti]));
+            textItem->setFont(QFont("Arial", 9, QFont::Bold));
+            textItem->setBrush(QBrush(QColor(255, 255, 255)));
+            textItem->setZValue(100);
+            chart->scene()->addItem(textItem);
+            QPointF scenePoint = chart->mapToPosition(QPointF(barCenterX, barTopY));
+            textItem->setPos(scenePoint.x() - textItem->boundingRect().width() / 2, scenePoint.y() - 18);
+        }
+    }
+}
+
+
+void Defect_Data_Display::onDataLoaded_PlatformAoiResult(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories, const QString& timeRange)
+{
+    Q_UNUSED(platformAoiResultData);
+    Q_UNUSED(aoiResultCategories);
+    Q_UNUSED(timeRange);
+    if (!m_platformTrendData.isEmpty()) {
+        updatePlatformTrendChart(m_platformTrendData);
     }
 }
 
