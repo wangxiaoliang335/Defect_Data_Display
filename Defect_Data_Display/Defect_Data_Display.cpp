@@ -394,7 +394,7 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
     ui.searchResultTable->setStyleSheet(R"(
         QTableWidget {
             background-color: #16213e;
-            color: #e0f0ff;
+            color: #ee2033;
             gridline-color: rgba(0, 217, 255, 60);
             font-size: 13px;
             border: none;
@@ -406,7 +406,7 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
         }
         QTableWidget::item:selected {
             background-color: rgba(0, 217, 255, 80);
-            color: #ffffff;
+            color: #ff3326;
         }
         QHeaderView::section {
             background-color: rgba(0, 150, 200, 150);
@@ -498,7 +498,7 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
         if (aoiResult == "OK") {
             resultItem->setForeground(QBrush(QColor(0, 255, 136)));
         } else {
-            resultItem->setForeground(QBrush(QColor(255, 100, 100)));
+            resultItem->setForeground(QBrush(QColor(128, 100, 100)));
         }
         ui.searchResultTable->setItem(row, 5, resultItem);
 
