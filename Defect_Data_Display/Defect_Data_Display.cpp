@@ -517,8 +517,17 @@ void Defect_Data_Display::onDateChanged(const QDate& date)
     qDebug() << "=== onDateChanged called ===" << date.toString();
     m_selectedDate = date;
 
+    // Invalidate location abnormal cache when date changes
+    m_locationAbnormalCache.timestamp = 0;
+
+    // If currently on location abnormal tab (index 6 or 7), reload data immediately
+    int currentTabIndex = ui.tabWidget->currentIndex();
+    if (currentTabIndex == 6 || currentTabIndex == 7) {
+        QString timeRange = ui.comboTimeRange->currentText();
+        loadLocationAbnormalDataAsync(timeRange);
+    }
+
     // Always refresh main page data when date changes
-    // This will refresh the summary statistics (AOI types, total defects, inspection counts, etc.)
     onRefreshClicked();
 }
 
@@ -2933,7 +2942,6 @@ void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange
             this, [this](int loadId, int tabIndex) {
                 if (loadId == m_currentLoadId) {
                     m_isTabLoading = false;
-                    qDebug() << "Tab" << tabIndex << "load finished";
                 }
             }, Qt::QueuedConnection);
 
@@ -2954,11 +2962,6 @@ void Defect_Data_Display::onDataLoaded_LocationAbnormal(const QMap<QString, QMap
 
 void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<int, int>>& abnormalByPeriod)
 {
-    qDebug() << "=== updateLocationAbnormalChart called ===";
-    qDebug() << "Data periods count:" << abnormalByPeriod.keys().size();
-    qDebug() << "Time range:" << ui.comboTimeRange->currentText();
-    qDebug() << "Selected date:" << m_selectedDate;
-
     // Clear existing content in all frames
     QList<QFrame*> frames = {
         ui.chartLocationAbnormalFrame0,
@@ -2968,12 +2971,14 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
         ui.chartLocationAbnormalFrame4
     };
     for (QFrame* frame : frames) {
-        if (QLayout* existingLayout = frame->layout()) {
+        QLayout* existingLayout = frame->layout();
+        if (existingLayout) {
             QLayoutItem* item;
             while ((item = existingLayout->takeAt(0)) != nullptr) {
                 delete item->widget();
                 delete item;
             }
+            delete existingLayout;
         }
     }
 
@@ -3169,7 +3174,6 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
                 int count = abnormalByPeriod.value(periods[j]).value(markId, 0);
                 if (count > maxValue) maxValue = count;
             }
-            qDebug() << "MarkId:" << markId << "maxValue:" << maxValue << "-> Y-axis max:" << (maxValue == 0 ? 10 : maxValue * 3.0);
 
             QValueAxis* axisY = new QValueAxis();
             axisY->setLabelFormat("%d");
