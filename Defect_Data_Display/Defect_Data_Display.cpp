@@ -3050,8 +3050,12 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
                 shortLabel = period.mid(period.lastIndexOf(" ") + 1, 2);
             } else if (period.contains("-")) {
                 QStringList parts = period.split("-");
-                if (parts.size() >= 3) {
-                    shortLabel = parts[2];
+                if (parts.size() >= 2) {
+                    if (parts.size() >= 3) {
+                        shortLabel = parts[2];
+                    } else {
+                        shortLabel = parts[1];
+                    }
                 }
             }
             categories << shortLabel;
@@ -3164,13 +3168,17 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
                     shortLabel = period.mid(period.lastIndexOf(" ") + 1, 2);
                 } else if (period.contains("-")) {
                     QStringList parts = period.split("-");
-                    if (parts.size() >= 3) {
-                        QString month = parts[1];
-                        QString day = parts[2];
-                        if (period.length() <= 7) {
-                            shortLabel = month + "/" + day;
+                    if (parts.size() >= 2) {
+                        if (parts.size() >= 3) {
+                            QString month = parts[1];
+                            QString day = parts[2];
+                            if (period.length() <= 7) {
+                                shortLabel = month + "/" + day;
+                            } else {
+                                shortLabel = day;
+                            }
                         } else {
-                            shortLabel = day;
+                            shortLabel = parts[1];
                         }
                     }
                 }
