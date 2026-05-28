@@ -3068,8 +3068,8 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
                 barSet->setColor(QColor(0, 200, 255));
                 barSet->setLabelColor(QColor(234, 234, 234));
                 barSeries->append(barSet);
-                categories << shortLabel;
             }
+            categories << shortLabel;
         }
 
         // Create chart
