@@ -969,6 +969,16 @@ void Defect_Data_Display::onTimeRangeChanged(int index)
 {
     Q_UNUSED(index);
 
+    // Invalidate location abnormal cache when time range changes
+    m_locationAbnormalCache.timestamp = 0;
+
+    // If currently on location abnormal tab (index 6 or 7), reload data immediately
+    int currentTabIndex = ui.tabWidget->currentIndex();
+    if (currentTabIndex == 6 || currentTabIndex == 7) {
+        QString timeRange = ui.comboTimeRange->currentText();
+        loadLocationAbnormalDataAsync(timeRange);
+    }
+
     // Always refresh main page data when time range changes
     onRefreshClicked();
 }
@@ -3012,7 +3022,14 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
         barSeries->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
 
         QStringList categories;
-        int maxCategories = timeRange == "按小时" ? 24 : 12;
+        int maxCategories;
+        if (timeRange == "按小时") {
+            maxCategories = 24;
+        } else if (timeRange == "按天") {
+            maxCategories = 31;  // 最多显示31天
+        } else {
+            maxCategories = 12;  // 按月
+        }
 
         for (int j = 0; j < periods.size() && j < maxCategories; ++j) {
             QString period = periods[j];
@@ -3123,7 +3140,14 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
             barSeries->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
 
             QStringList categories;
-            int maxCategories = timeRange == "按小时" ? 24 : 12;
+            int maxCategories;
+            if (timeRange == "按小时") {
+                maxCategories = 24;
+            } else if (timeRange == "按天") {
+                maxCategories = 31;
+            } else {
+                maxCategories = 12;
+            }
 
             for (int j = 0; j < periods.size() && j < maxCategories; ++j) {
                 QString period = periods[j];
