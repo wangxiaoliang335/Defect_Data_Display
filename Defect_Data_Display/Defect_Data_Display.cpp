@@ -3030,6 +3030,10 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
         barSeries->setLabelsFormat("@value");
         barSeries->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
 
+        qDebug() << "=== Building summary chart ===";
+        qDebug() << "Total periods to process:" << periods.size();
+        qDebug() << "abnormalByPeriod keys:" << abnormalByPeriod.keys();
+
         QStringList categories;
         int maxCategories;
         if (timeRange == "按小时") {
@@ -3047,6 +3051,8 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
             for (auto it = markData.constBegin(); it != markData.constEnd(); ++it) {
                 totalCount += it.value();
             }
+
+            qDebug() << "Period:" << period << "totalCount:" << totalCount << "shortLabel:" << shortLabel;
 
             QString shortLabel;
             if (period.contains(":")) {
