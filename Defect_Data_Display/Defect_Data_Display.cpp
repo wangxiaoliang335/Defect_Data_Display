@@ -3048,12 +3048,6 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
                 totalCount += it.value();
             }
 
-            QBarSet* barSet = new QBarSet("");
-            *barSet << totalCount;
-            barSet->setColor(QColor(0, 200, 255));
-            barSet->setLabelColor(QColor(234, 234, 234));
-            barSeries->append(barSet);
-
             QString shortLabel;
             if (period.contains(":")) {
                 shortLabel = period.mid(period.lastIndexOf(" ") + 1, 2);
@@ -3067,7 +3061,15 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
                     }
                 }
             }
-            categories << shortLabel;
+
+            if (totalCount > 0) {
+                QBarSet* barSet = new QBarSet(shortLabel);
+                *barSet << totalCount;
+                barSet->setColor(QColor(0, 200, 255));
+                barSet->setLabelColor(QColor(234, 234, 234));
+                barSeries->append(barSet);
+                categories << shortLabel;
+            }
         }
 
         // Create chart
