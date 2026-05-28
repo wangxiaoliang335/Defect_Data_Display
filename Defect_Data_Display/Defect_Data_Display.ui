@@ -991,6 +991,26 @@ QTabBar::tab:hover {
           <property name="currentIndex">
            <number>0</number>
           </property>
+          <widget class="QWidget" name="chartLocationAbnormalPage0">
+           <attribute name="title">
+            <string>按时间</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="layoutPage0">
+            <item>
+             <widget class="QFrame" name="chartLocationAbnormalFrame0">
+              <property name="styleSheet">
+               <string>
+QFrame {
+    background-color: #16213e;
+    border: none;
+    border-radius: 8px;
+}
+               </string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
           <widget class="QWidget" name="chartLocationAbnormalPage1">
            <attribute name="title">
             <string>工位 1-4</string>

@@ -2961,6 +2961,7 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
 
     // Clear existing content in all frames
     QList<QFrame*> frames = {
+        ui.chartLocationAbnormalFrame0,
         ui.chartLocationAbnormalFrame1,
         ui.chartLocationAbnormalFrame2,
         ui.chartLocationAbnormalFrame3,
@@ -2981,13 +2982,103 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
     // Generate time periods based on time range type
     QList<QString> periods;
     if (timeRange == "按小时") {
-        // Generate all 24 hours for the selected date
         for (int h = 0; h < 24; ++h) {
             periods << QString("%1 %2:00").arg(m_selectedDate.toString("yyyy-MM-dd")).arg(h, 2, 10, QChar('0'));
         }
     } else {
         periods = abnormalByPeriod.keys();
         std::sort(periods.begin(), periods.end());
+    }
+
+    // Page 0: 按时间统计（总数，不区分工位）
+    {
+        QFrame* frame = frames[0];
+
+        QWidget* container = new QWidget();
+        container->setStyleSheet("background-color: #16213e; border-radius: 8px;");
+        QVBoxLayout* mainLayout = new QVBoxLayout(container);
+        mainLayout->setSpacing(10);
+        mainLayout->setContentsMargins(10, 10, 10, 10);
+
+        // Create single bar series for total count by time
+        QBarSeries* barSeries = new QBarSeries();
+        barSeries->setLabelsVisible(true);
+        barSeries->setLabelsFormat("@value");
+        barSeries->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
+
+        QStringList categories;
+        int maxCategories = timeRange == "按小时" ? 24 : 12;
+
+        for (int j = 0; j < periods.size() && j < maxCategories; ++j) {
+            QString period = periods[j];
+            int totalCount = 0;
+            QMap<int, int> markData = abnormalByPeriod.value(period);
+            for (auto it = markData.constBegin(); it != markData.constEnd(); ++it) {
+                totalCount += it.value();
+            }
+
+            QBarSet* barSet = new QBarSet("");
+            *barSet << totalCount;
+            barSet->setColor(QColor(0, 200, 255));
+            barSet->setLabelColor(QColor(234, 234, 234));
+            barSeries->append(barSet);
+
+            QString shortLabel;
+            if (period.contains(":")) {
+                shortLabel = period.mid(period.lastIndexOf(" ") + 1, 2);
+            } else if (period.contains("-")) {
+                QStringList parts = period.split("-");
+                if (parts.size() >= 3) {
+                    shortLabel = parts[2];
+                }
+            }
+            categories << shortLabel;
+        }
+
+        // Create chart
+        QChart* chart = new QChart();
+        chart->addSeries(barSeries);
+        chart->setTitle("定位异常总数趋势");
+        chart->setAnimationOptions(QChart::NoAnimation);
+        chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+        chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
+        chart->legend()->setVisible(false);
+
+        QBarCategoryAxis* axisX = new QBarCategoryAxis();
+        axisX->append(categories);
+        axisX->setLabelsColor(QColor(234, 234, 234));
+        axisX->setLabelsFont(QFont("Arial", 9));
+        chart->addAxis(axisX, Qt::AlignBottom);
+
+        int maxValue = 0;
+        for (int j = 0; j < periods.size() && j < maxCategories; ++j) {
+            int totalCount = 0;
+            QMap<int, int> markData = abnormalByPeriod.value(periods[j]);
+            for (auto it = markData.constBegin(); it != markData.constEnd(); ++it) {
+                totalCount += it.value();
+            }
+            if (totalCount > maxValue) maxValue = totalCount;
+        }
+
+        QValueAxis* axisY = new QValueAxis();
+        axisY->setLabelFormat("%d");
+        axisY->setLabelsColor(QColor(234, 234, 234));
+        axisY->setLabelsFont(QFont("Arial", 9));
+        axisY->setGridLineVisible(true);
+        axisY->setMinorGridLineVisible(false);
+        axisY->setRange(0, maxValue == 0 ? 10 : maxValue * 1.2);
+        chart->addAxis(axisY, Qt::AlignLeft);
+        barSeries->attachAxis(axisY);
+
+        QChartView* chartView = new QChartView(chart);
+        chartView->setRenderHint(QPainter::Antialiasing);
+        chartView->setMinimumHeight(300);
+
+        mainLayout->addWidget(chartView);
+
+        QVBoxLayout* wrapperLayout = new QVBoxLayout(frame);
+        wrapperLayout->setContentsMargins(0, 0, 0, 0);
+        wrapperLayout->addWidget(container);
     }
 
     // Colors for bars - distinct colors for each time period
@@ -3003,7 +3094,7 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
 
     // Process each page (4 platforms per page)
     for (int page = 0; page < 4; ++page) {
-        QFrame* frame = frames[page];
+        QFrame* frame = frames[page + 1];
         int startMarkId = page * 4 + 1;  // 1, 5, 9, 13
 
         // Create container with vertical layout
