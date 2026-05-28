@@ -206,15 +206,11 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
 {
     if (event->type() == QEvent::MouseMove) {
         QMouseEvent* me = static_cast<QMouseEvent*>(event);
-        qDebug() << "[EVENT] MouseMove watched:" << watched << "pos:" << me->pos();
         bool matched = false;
         for (int p = 0; p < 4; ++p) {
             void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
             QChartView* cv = (QChartView*)chartViewPtrs[p];
-            qDebug() << "[EVENT]  p=" << p << "cv:" << cv << "cv->viewport():" << (cv ? cv->viewport() : nullptr);
             if (cv && (cv == watched || cv->viewport() == watched)) {
-                qDebug() << "[EVENT] Matched platform" << p;
-                // Convert viewport coordinates to chart coordinates using chart->mapToValue
                 QChart* chart = cv->chart();
                 QList<QAbstractSeries*> seriesList = chart->series();
                 if (!seriesList.isEmpty()) {
@@ -229,7 +225,6 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
             m_tooltipLabel->hide();
         }
     } else if (event->type() == QEvent::Leave) {
-        // Hide tooltip when mouse leaves a platform chart
         for (int p = 0; p < 4; ++p) {
             void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
             QChartView* cv = (QChartView*)chartViewPtrs[p];
@@ -246,38 +241,24 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
 {
     QChart* chart = chartView->chart();
     QList<QAbstractSeries*> allSeries = chart->series();
-    qDebug() << "[TOOLTIP] series count:" << allSeries.size();
-    if (allSeries.isEmpty()) { qDebug() << "[TOOLTIP] early return: no series"; return; }
+    if (allSeries.isEmpty()) return;
 
     QAbstractBarSeries* barSeries = qobject_cast<QAbstractBarSeries*>(allSeries.first());
-    qDebug() << "[TOOLTIP] barSeries:" << barSeries;
-    if (!barSeries) { qDebug() << "[TOOLTIP] early return: not bar series"; return; }
+    if (!barSeries) return;
 
-    // Use plot area to determine position
     QRectF plotArea = chart->plotArea();
-    qDebug() << "[TOOLTIP] viewportPos:" << viewportPos << "plotArea:" << plotArea;
-    
-    // Calculate position relative to plotArea using pixel coordinates
     qreal relX = (viewportPos.x() - plotArea.left()) / plotArea.width();
     qreal relY = (viewportPos.y() - plotArea.top()) / plotArea.height();
-    qDebug() << "[TOOLTIP] relX:" << relX << "relY:" << relY;
-    
-    // Only show tooltip if mouse is within the plot area
-    if (relX < 0 || relX > 1 || relY < 0 || relY > 1) {
-        qDebug() << "[TOOLTIP] mouse outside plot area";
-        return;
-    }
 
-    // Get categories from X axis
+    if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return;
+
     QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
-    if (axesX.isEmpty()) { qDebug() << "[TOOLTIP] no X axes"; return; }
+    if (axesX.isEmpty()) return;
     QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
-    if (!axisX) { qDebug() << "[TOOLTIP] X axis not bar category"; return; }
+    if (!axisX) return;
     QStringList categories = axisX->categories();
-    qDebug() << "[TOOLTIP] categories:" << categories;
-    if (categories.isEmpty()) { qDebug() << "[TOOLTIP] empty categories"; return; }
+    if (categories.isEmpty()) return;
 
-    // Find bar index by position
     int numCategories = categories.size();
     int numBarSets = barSeries->count();
     int totalBars = numCategories * numBarSets;
@@ -285,14 +266,10 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
 
     int barIndex = static_cast<int>(relX * totalBars);
     int categoryIndex = barIndex / qMax(numBarSets, 1);
-    if (categoryIndex < 0 || categoryIndex >= categories.size()) {
-        qDebug() << "[TOOLTIP] categoryIndex out of range:" << categoryIndex << "vs" << categories.size();
-        return;
-    }
-    QString timeKey = categories[categoryIndex];
-    qDebug() << "[TOOLTIP] categoryIndex:" << categoryIndex << "timeKey:" << timeKey;
+    if (categoryIndex < 0 || categoryIndex >= categories.size()) return;
 
-    // Map timeKey back to originalKey
+    QString timeKey = categories[categoryIndex];
+
     QString timeRange = ui.comboTimeRange->currentText();
     QString originalKey;
     for (auto it = m_platformTrendData.constBegin(); it != m_platformTrendData.constEnd(); ++it) {
@@ -308,16 +285,13 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
         }
     }
 
-    qDebug() << "[TOOLTIP] originalKey:" << originalKey << "m_platformTrendData.size():" << m_platformTrendData.size();
-    if (originalKey.isEmpty() || !m_platformTrendData.contains(originalKey)) { qDebug() << "[TOOLTIP] early return: no originalKey"; return; }
-    if (!m_platformTrendData[originalKey].contains(platformIdx)) { qDebug() << "[TOOLTIP] early return: no platformIdx" << platformIdx; return; }
+    if (originalKey.isEmpty() || !m_platformTrendData.contains(originalKey)) return;
+    if (!m_platformTrendData[originalKey].contains(platformIdx)) return;
 
     int pass = m_platformTrendData[originalKey][platformIdx].first;
     int fail = m_platformTrendData[originalKey][platformIdx].second;
 
-    // Build clean, readable tooltip
     int total = pass + fail;
-    qDebug() << "[TOOLTIP] SHOWING TOOLTIP! total:" << total;
 
     // Pass / Fail each on their own line
     QString tipPassFail = QString(
@@ -917,6 +891,8 @@ void Defect_Data_Display::onRefreshClicked()
     // Connect new trend data signals
     connect(m_workerThread, &DataLoaderThread::platformTrendLoaded,
             this, &Defect_Data_Display::onDataLoaded_PlatformTrend, Qt::QueuedConnection);
+    connect(m_workerThread, &DataLoaderThread::platformAoiResultLoaded,
+            this, &Defect_Data_Display::onDataLoaded_PlatformAoiResult, Qt::QueuedConnection);
     connect(m_workerThread, &DataLoaderThread::defectTrendLoaded,
             this, &Defect_Data_Display::onDataLoaded_DefectTrend, Qt::QueuedConnection);
     connect(m_workerThread, &DataLoaderThread::inspectionTrendLoaded,
@@ -2068,9 +2044,13 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
 
 void Defect_Data_Display::onDataLoaded_PlatformAoiResult(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories, const QString& timeRange)
 {
-    Q_UNUSED(platformAoiResultData);
     Q_UNUSED(aoiResultCategories);
     Q_UNUSED(timeRange);
+
+    // Save the data to member variable for tooltip usage
+    m_platformAoiResultData = platformAoiResultData;
+    qDebug() << "[PlatformAoiResult] Saved" << m_platformAoiResultData.size() << "time periods";
+
     if (!m_platformTrendData.isEmpty()) {
         updatePlatformTrendChart(m_platformTrendData);
     }
@@ -2442,8 +2422,39 @@ void DataLoaderThread::run()
         qDebug() << "Inspection trend query failed:" << inspectionTrendQ.lastError().text();
     }
 
+    // Query 1b: Platform AOIResult detail by time period (per platform, per AOIResult)
+    qDebug() << "Querying platform AOIResult detail...";
+    QString platformAoiResultQuery = QString(R"(
+        SELECT %1 as time_period, PlatformID, AOIResult, COUNT(*) as cnt
+        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        WHERE %2
+        GROUP BY time_period, PlatformID, AOIResult
+        ORDER BY time_period, PlatformID, AOIResult
+    )").arg(timeFormat).arg(queryCondition);
+
+    QSqlQuery platformAoiResultQ(db);
+    platformAoiResultQ.setForwardOnly(true);
+    QMap<QString, QMap<int, QMap<QString, int>>> platformAoiResultData;
+    QStringList aoiResultCategories;
+
+    if (platformAoiResultQ.exec(platformAoiResultQuery)) {
+        while (platformAoiResultQ.next()) {
+            QString period = platformAoiResultQ.value(0).toString();
+            int platformId = platformAoiResultQ.value(1).toInt();
+            QString aoiResult = platformAoiResultQ.value(2).toString();
+            int cnt = platformAoiResultQ.value(3).toInt();
+            platformAoiResultData[period][platformId][aoiResult] = cnt;
+            if (!aoiResultCategories.contains(aoiResult)) {
+                aoiResultCategories.append(aoiResult);
+            }
+        }
+    } else {
+        qDebug() << "Platform AOIResult query failed:" << platformAoiResultQ.lastError().text();
+    }
+
     // Emit trend data signals
     emit platformTrendLoaded(platformTrendData, m_timeRange);
+    emit platformAoiResultLoaded(platformAoiResultData, aoiResultCategories, m_timeRange);
     emit defectTrendLoaded(defectTrendData, m_timeRange);
     emit inspectionTrendLoaded(inspectionTrendData, m_timeRange);
 
