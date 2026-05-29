@@ -2417,18 +2417,23 @@ void DataLoaderThread::run()
         GROUP BY time_period, Type
         ORDER BY time_period
     )").arg(timeFormat).arg(aoiDefectCondition);
+    qDebug() << "Defect trend query:" << defectTrendQuery;
 
     QSqlQuery defectTrendQ(db);
     defectTrendQ.setForwardOnly(true);
     QMap<QString, QMap<QString, int>> defectTrendData;
 
     if (defectTrendQ.exec(defectTrendQuery)) {
+        qDebug() << "Defect trend query executed successfully";
+        int rowCount = 0;
         while (defectTrendQ.next()) {
+            rowCount++;
             QString period = defectTrendQ.value(0).toString();
             QString defectType = defectTrendQ.value(1).toString();
             int cnt = defectTrendQ.value(2).toInt();
             defectTrendData[period][defectType] = cnt;
         }
+        qDebug() << "Defect trend rows returned:" << rowCount;
     } else {
         qDebug() << "Defect trend query failed:" << defectTrendQ.lastError().text();
     }
