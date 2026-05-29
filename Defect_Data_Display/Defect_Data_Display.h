@@ -217,7 +217,7 @@ signals:
     void defectMappingDataLoaded(const QList<QPair<int, int>>& positions, const QStringList& types);
     void trendDataLoaded(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
     void detailDataLoaded(const QList<QVariantList>& defectDetails);
-    void locationAbnormalDataLoaded(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
+    void locationAbnormalDataLoaded(int loadId, const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void finished(int loadId, int tabIndex);
 
 protected:

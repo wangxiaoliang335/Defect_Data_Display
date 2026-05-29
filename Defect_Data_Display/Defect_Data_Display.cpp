@@ -2884,7 +2884,7 @@ void TabDataLoaderThread::run()
                 int count = query.value(2).toInt();
                 abnormalByPeriod[period][markId] = count;
             }
-            emit locationAbnormalDataLoaded(abnormalByPeriod);
+            emit locationAbnormalDataLoaded(m_loadId, abnormalByPeriod);
         } else {
             qDebug() << "Location abnormal query failed:" << query.lastError().text();
         }
@@ -2984,7 +2984,13 @@ void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::locationAbnormalDataLoaded,
-            this, &Defect_Data_Display::onDataLoaded_LocationAbnormal, Qt::QueuedConnection);
+            this, [this](int loadId, const QMap<QString, QMap<int, int>>& abnormalByPeriod) {
+                if (loadId != m_currentLoadId) {
+                    qDebug() << "LocationAbnormal: stale load" << loadId << "vs current" << m_currentLoadId;
+                    return;
+                }
+                onDataLoaded_LocationAbnormal(abnormalByPeriod);
+            }, Qt::QueuedConnection);
     connect(m_tabWorkerThread, &TabDataLoaderThread::finished,
             this, [this](int loadId, int tabIndex) {
                 if (loadId == m_currentLoadId) {
@@ -3001,6 +3007,7 @@ void Defect_Data_Display::onDataLoaded_LocationAbnormal(const QMap<QString, QMap
     qDebug() << "=== onDataLoaded_LocationAbnormal called ===";
     qDebug() << "abnormalByPeriod keys:" << abnormalByPeriod.keys();
     qDebug() << "m_currentLoadId:" << m_currentLoadId;
+    qDebug() << "Stale check passed";
 
     m_locationAbnormalData = abnormalByPeriod;
 
