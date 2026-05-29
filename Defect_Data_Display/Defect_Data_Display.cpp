@@ -1,4 +1,4 @@
-#include "Defect_Data_Display.h"
+﻿#include "Defect_Data_Display.h"
 #include <QtCharts/QChartView>
 #include <QtCharts/QBarSeries>
 #include <QtCharts/QBarSet>
@@ -274,12 +274,12 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
     QString originalKey;
     for (auto it = m_platformTrendData.constBegin(); it != m_platformTrendData.constEnd(); ++it) {
         QString label = it.key();
-        if (timeRange == "????" && label.contains(" ")) {
+        if (timeRange == "按小时" && label.contains(" ")) {
             if (label.split(" ").at(1).left(5) == timeKey) { originalKey = it.key(); break; }
-        } else if (timeRange == "????" && label.contains("-")) {
+        } else if (timeRange == "按天" && label.contains("-")) {
             QStringList parts = label.split("-");
             if (parts.size() >= 3 && parts.at(2) == timeKey) { originalKey = it.key(); break; }
-        } else if (timeRange == "????" && label == timeKey) {
+        } else if (timeRange == "按月" && label == timeKey) {
             originalKey = it.key();
             break;
         }
@@ -300,20 +300,20 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
         "<div style='font-size:17px'><span style='color:#f87171'>Fail : %2</span></div>"
         "</div>").arg(pass).arg(fail);
 
-    // AOI Result section - ??? AOIResult ???????????
+    // AOI Result section - 显示 AOIResult 字段的各种值统计
     QString section1;
     if (!m_platformAoiResultData.isEmpty() && m_platformAoiResultData.contains(originalKey)
         && m_platformAoiResultData[originalKey].contains(platformIdx)) {
         const QMap<QString, int>& aoiMap = m_platformAoiResultData[originalKey][platformIdx];
         for (auto ait = aoiMap.constBegin(); ait != aoiMap.constEnd(); ++ait) {
-            // ???????????�?????
-            QString color = "#f0f0f0";  // ?????
+            // 为不同类型设置不同颜色
+            QString color = "#f0f0f0";  // 默认白色
             if (ait.key() == "OK") {
-                color = "#4ade80";  // ???
+                color = "#4ade80";  // 绿色
             } else if (ait.key() == "NG") {
-                color = "#f87171";  // ???
+                color = "#f87171";  // 红色
             } else {
-                color = "#fbbf24";  // ??? - ????????
+                color = "#fbbf24";  // 黄色 - 其他类型
             }
             section1 += QString("<div style='font-size:15px'><span style='color:%1'>%2 : %3</span></div>").arg(color).arg(ait.key()).arg(ait.value());
         }
@@ -385,7 +385,7 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
         return;
 
     // Update search result tab header
-    ui.labelSearchId->setText(QString("????ID: %1").arg(screenId));
+    ui.labelSearchId->setText(QString("搜索ID: %1").arg(screenId));
 
     // Switch to search result tab
     ui.tabWidget->setCurrentIndex(TAB_SEARCH);
@@ -515,12 +515,7 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
 void Defect_Data_Display::onDateChanged(const QDate& date)
 {
     qDebug() << "=== onDateChanged called ===" << date.toString();
-    qDebug() << "m_selectedDate updated, current m_searchScreenId:" << m_searchScreenId;
     m_selectedDate = date;
-
-    // Clear ScreenID filter when date changes - only search button should filter by ScreenID
-    m_searchScreenId = "";
-    ui.searchEdit->clear();
 
     // Invalidate location abnormal cache when date changes
     m_locationAbnormalCache.timestamp = 0;
@@ -529,7 +524,7 @@ void Defect_Data_Display::onDateChanged(const QDate& date)
     int currentTabIndex = ui.tabWidget->currentIndex();
     if (currentTabIndex == 6 || currentTabIndex == 7) {
         QString timeRange = ui.comboTimeRange->currentText();
-        loadLocationAbnormalDataAsync(timeRange, -1);  // -1 means auto-increment inside
+        loadLocationAbnormalDataAsync(timeRange);
     }
 
     // Always refresh main page data when date changes
@@ -548,16 +543,9 @@ void Defect_Data_Display::onTabChanged(int index)
         switch (index) {
         case 0:
         case 1:
-        case 2: {
-            qDebug() << "Index 0-2: checking if platform data needs refresh";
-            qDebug() << "m_platformTrendData.size():" << m_platformTrendData.size();
-            qDebug() << "m_searchScreenId:" << m_searchScreenId;
-            if (!m_platformTrendData.isEmpty()) {
-                qDebug() << "Refreshing platform charts";
-                updatePlatformTrendChart(m_platformTrendData);
-            }
+        case 2:
+            qDebug() << "Index 0-2: doing nothing";
             break;
-        }
         case 3: {
             qDebug() << "Index 3: Defect Mapping";
             CachedTabData* cache = &m_defectMappingCache;
@@ -598,7 +586,7 @@ void Defect_Data_Display::onTabChanged(int index)
                 updateLocationAbnormalChart(m_locationAbnormalData);
             } else {
                 qDebug() << "Cache invalid, calling loadLocationAbnormalDataAsync";
-                loadLocationAbnormalDataAsync(timeRange, -1);
+                loadLocationAbnormalDataAsync(timeRange);
             }
             break;
         }
@@ -610,7 +598,7 @@ void Defect_Data_Display::onTabChanged(int index)
                 updateLocationAbnormalChart(m_locationAbnormalData);
             } else {
                 qDebug() << "Cache invalid, calling loadLocationAbnormalDataAsync";
-                loadLocationAbnormalDataAsync(timeRange, -1);
+                loadLocationAbnormalDataAsync(timeRange);
             }
             break;
         }
@@ -631,7 +619,7 @@ void Defect_Data_Display::updateDateTime()
 void Defect_Data_Display::setupCharts()
 {
     // Create 4 separate charts for each platform
-    QStringList platformNames = {"????", "?????", "?????", "?????"};
+    QStringList platformNames = {"工位一", "工位二", "工位三", "工位四"};
     QList<QColor> platformColors = {
         QColor(0, 255, 136),    // P0 - Green
         QColor(255, 200, 0),    // P1 - Yellow
@@ -861,7 +849,6 @@ bool Defect_Data_Display::connectToDatabase()
 void Defect_Data_Display::onRefreshClicked()
 {
     qDebug() << "=== onRefreshClicked called ===";
-    qDebug() << "m_searchScreenId:" << m_searchScreenId;
     qDebug() << "m_isLoading:" << m_isLoading;
 
     // Clear all charts to show empty state
@@ -893,10 +880,10 @@ void Defect_Data_Display::onRefreshClicked()
     ui.labelStatus->setText("Loading...");
     ui.labelStatus->setStyleSheet("color: #ffaa00;");
 
-    qDebug() << "onRefreshClicked: about to increment m_currentLoadId, current value:" << m_currentLoadId;
+    m_isLoading = true;
+    ui.btnRefresh->setEnabled(false);
     ++m_currentLoadId;
     int thisLoadId = m_currentLoadId;
-    qDebug() << "onRefreshClicked: new loadId:" << thisLoadId;
 
     qDebug() << "Creating new worker thread with loadId:" << thisLoadId;
     m_workerThread = new DataLoaderThread(thisLoadId, timeRange, getDateTimeRange(timeRange), m_searchScreenId, this);
@@ -989,7 +976,7 @@ void Defect_Data_Display::onTimeRangeChanged(int index)
     int currentTabIndex = ui.tabWidget->currentIndex();
     if (currentTabIndex == 6 || currentTabIndex == 7) {
         QString timeRange = ui.comboTimeRange->currentText();
-        loadLocationAbnormalDataAsync(timeRange, -1);  // -1 means use internal m_locationAbnormalLoadId
+        loadLocationAbnormalDataAsync(timeRange);
     }
 
     // Always refresh main page data when time range changes
@@ -1076,9 +1063,7 @@ void Defect_Data_Display::onDataLoaded_Detail(const QList<QVariantList>& defectD
 
 void Defect_Data_Display::onDataLoaded_PlatformTrend(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData, const QString& timeRange)
 {
-    qDebug() << "=== onDataLoaded_PlatformTrend called ===";
-    qDebug() << "time periods:" << platformTrendData.size();
-    qDebug() << "current m_searchScreenId:" << m_searchScreenId;
+    qDebug() << "=== onDataLoaded_PlatformTrend called ===" << "time periods:" << platformTrendData.size();
 
     m_platformTrendData = platformTrendData;
     m_currentTimeFormat = timeRange;
@@ -1108,11 +1093,11 @@ void Defect_Data_Display::onDataLoaded_InspectionTrend(const QMap<QString, QPair
 
 QString Defect_Data_Display::getTimeFilterClause(const QString& timeRange)
 {
-    if (timeRange == "????") {
+    if (timeRange == "按小时") {
         return "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
-    } else if (timeRange == "????") {
+    } else if (timeRange == "按天") {
         return "DATE_FORMAT(StartTime, '%Y-%m-%d')";
-    } else if (timeRange == "????") {
+    } else if (timeRange == "按月") {
         return "DATE_FORMAT(StartTime, '%Y-%m')";
     }
     return "DATE_FORMAT(StartTime, '%Y-%m-%d')";
@@ -1120,15 +1105,15 @@ QString Defect_Data_Display::getTimeFilterClause(const QString& timeRange)
 
 QString Defect_Data_Display::getDateTimeRange(const QString& timeRange)
 {
-    if (timeRange == "????") {
+    if (timeRange == "按小时") {
         return QString("StartTime >= '%1 00:00:00' AND StartTime <= '%1 23:59:59'")
             .arg(m_selectedDate.toString("yyyy-MM-dd"));
-    } else if (timeRange == "????") {
+    } else if (timeRange == "按天") {
         int year = m_selectedDate.year();
         int month = m_selectedDate.month();
         return QString("StartTime >= '%1-%2-01' AND StartTime < DATE_ADD('%1-%2-01', INTERVAL 1 MONTH)")
             .arg(year).arg(month, 2, 10, QChar('0'));
-    } else if (timeRange == "????") {
+    } else if (timeRange == "按月") {
         int year = m_selectedDate.year();
         return QString("StartTime >= '%1-01-01' AND StartTime < '%2-01-01'")
             .arg(year).arg(year + 1);
@@ -1456,13 +1441,13 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
     for (auto it = trendData.constBegin(); it != trendData.constEnd(); ++it) {
         QString label = it.key();
         // Format label based on time range
-        if (timeRange == "????") {
+        if (timeRange == "按小时") {
             // Extract hour from "2026-05-22 00:00"
             if (label.contains(" ")) {
                 QString timePart = label.split(" ").at(1);
                 label = timePart.left(5);  // Get "HH:00"
             }
-        } else if (timeRange == "????") {
+        } else if (timeRange == "按天") {
             // Show only day "2026-05-22" -> "22"
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
@@ -1471,7 +1456,7 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
                 }
             }
         }
-        // ????: keep as "2026-05"
+        // 按月: keep as "2026-05"
         categories.append(label);
         defectSeries->append(index++, it.value().first);
     }
@@ -1650,7 +1635,7 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     qDebug() << "Step 4: Creating pie chart";
 
     QChart* pieChart = new QChart();
-    pieChart->setTitle("?????????");
+    pieChart->setTitle("缺陷类型分布");
     pieChart->setAnimationOptions(QChart::NoAnimation);
     pieChart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     pieChart->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -1782,12 +1767,12 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
     for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
         QString label = it.key();
         // Format label based on time range
-        if (timeRange == "????") {
+        if (timeRange == "按小时") {
             if (label.contains(" ")) {
                 QString timePart = label.split(" ").at(1);
                 label = timePart.left(5);
             }
-        } else if (timeRange == "????") {
+        } else if (timeRange == "按天") {
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
                 if (parts.size() >= 3) {
@@ -1795,12 +1780,12 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
                 }
             }
         }
-        // ????: keep as is
+        // 按月: keep as is
         timeCategories.append(label);
     }
 
     // Sort time categories properly
-    if (timeRange == "????" || timeRange == "????") {
+    if (timeRange == "按小时" || timeRange == "按天") {
         std::sort(timeCategories.begin(), timeCategories.end(), [](const QString& a, const QString& b) {
             return a.toInt() < b.toInt();
         });
@@ -1814,7 +1799,7 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
         QColor(255, 100, 100)   // P3 - Red
     };
 
-    QStringList platformNames = {"????", "?????", "?????", "?????"};
+    QStringList platformNames = {"工位一", "工位二", "工位三", "工位四"};
 
     // Create chart for each platform
     void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
@@ -1837,19 +1822,19 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
             QString originalKey;
             for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
                 QString label = it.key();
-                if (timeRange == "????" && label.contains(" ")) {
+                if (timeRange == "按小时" && label.contains(" ")) {
                     QString timePart = label.split(" ").at(1);
                     if (timePart.left(5) == timeKey) {
                         originalKey = it.key();
                         break;
                     }
-                } else if (timeRange == "????" && label.contains("-")) {
+                } else if (timeRange == "按天" && label.contains("-")) {
                     QStringList parts = label.split("-");
                     if (parts.size() >= 3 && parts.at(2) == timeKey) {
                         originalKey = it.key();
                         break;
                     }
-                } else if (timeRange == "????" && label == timeKey) {
+                } else if (timeRange == "按月" && label == timeKey) {
                     originalKey = it.key();
                     break;
                 }
@@ -1896,19 +1881,19 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
             QString originalKey;
             for (auto it = platformTrendData.constBegin(); it != platformTrendData.constEnd(); ++it) {
                 QString label = it.key();
-                if (timeRange == "????" && label.contains(" ")) {
+                if (timeRange == "按小时" && label.contains(" ")) {
                     QString timePart = label.split(" ").at(1);
                     if (timePart.left(5) == timeKey) {
                         originalKey = it.key();
                         break;
                     }
-                } else if (timeRange == "????" && label.contains("-")) {
+                } else if (timeRange == "按天" && label.contains("-")) {
                     QStringList parts = label.split("-");
                     if (parts.size() >= 3 && parts.at(2) == timeKey) {
                         originalKey = it.key();
                         break;
                     }
-                } else if (timeRange == "????" && label == timeKey) {
+                } else if (timeRange == "按月" && label == timeKey) {
                     originalKey = it.key();
                     break;
                 }
@@ -1943,15 +1928,15 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
     QStringList timeCategories;
     for (auto it = platformAoiResultData.constBegin(); it != platformAoiResultData.constEnd(); ++it) {
         QString label = it.key();
-        if (timeRange == "????" && label.contains(" ")) {
+        if (timeRange == "按小时" && label.contains(" ")) {
             label = label.split(" ").at(1).left(5);
-        } else if (timeRange == "????" && label.contains("-")) {
+        } else if (timeRange == "按天" && label.contains("-")) {
             QStringList parts = label.split("-");
             if (parts.size() >= 3) label = parts.at(2);
         }
         if (!timeCategories.contains(label)) timeCategories.append(label);
     }
-    if (timeRange == "????" || timeRange == "????") {
+    if (timeRange == "按小时" || timeRange == "按天") {
         std::sort(timeCategories.begin(), timeCategories.end(), [](const QString& a, const QString& b) {
             return a.toInt() < b.toInt();
         });
@@ -1964,7 +1949,7 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
     resultColors << QColor(0, 255, 136) << QColor(255, 80, 80) << QColor(255, 200, 0)
                 << QColor(0, 150, 255) << QColor(200, 100, 255) << QColor(255, 150, 150)
                 << QColor(150, 200, 255) << QColor(200, 255, 150);
-    QStringList platformNames = {"????", "?????", "?????", "?????"};
+    QStringList platformNames = {"工位一", "工位二", "工位三", "工位四"};
 
     void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
 
@@ -2003,12 +1988,12 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
             QString originalKey;
             for (auto it2 = platformAoiResultData.constBegin(); it2 != platformAoiResultData.constEnd(); ++it2) {
                 QString label = it2.key();
-                if (timeRange == "????" && label.contains(" ")) {
+                if (timeRange == "按小时" && label.contains(" ")) {
                     if (label.split(" ").at(1).left(5) == timeKey) { originalKey = it2.key(); break; }
-                } else if (timeRange == "????" && label.contains("-")) {
+                } else if (timeRange == "按天" && label.contains("-")) {
                     QStringList parts = label.split("-");
                     if (parts.size() >= 3 && parts.at(2) == timeKey) { originalKey = it2.key(); break; }
-                } else if (timeRange == "????" && label == timeKey) {
+                } else if (timeRange == "按月" && label == timeKey) {
                     originalKey = it2.key(); break;
                 }
             }
@@ -2149,12 +2134,12 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
     for (auto it = defectTrendData.constBegin(); it != defectTrendData.constEnd(); ++it) {
         QString label = it.key();
         // Format label
-        if (timeRange == "????") {
+        if (timeRange == "按小时") {
             if (label.contains(" ")) {
                 QString timePart = label.split(" ").at(1);
                 label = timePart.left(5);
             }
-        } else if (timeRange == "????") {
+        } else if (timeRange == "按天") {
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
                 if (parts.size() >= 3) {
@@ -2244,12 +2229,12 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
     for (auto it = inspectionTrendData.constBegin(); it != inspectionTrendData.constEnd(); ++it) {
         QString label = it.key();
         // Format label
-        if (timeRange == "????") {
+        if (timeRange == "按小时") {
             if (label.contains(" ")) {
                 QString timePart = label.split(" ").at(1);
                 label = timePart.left(5);
             }
-        } else if (timeRange == "????") {
+        } else if (timeRange == "按天") {
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
                 if (parts.size() >= 3) {
@@ -2257,7 +2242,7 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
                 }
             }
         }
-        // ????: keep as is
+        // 按月: keep as is
         timeCategories.append(label);
 
         *passSet << it.value().first;
@@ -2358,21 +2343,18 @@ void DataLoaderThread::run()
     qDebug() << "Time range:" << m_timeRange;
     qDebug() << "Date range:" << m_dateRange;
 
-    // Build query conditions - ScreenID only exists in ivs_lcd_inspectionresult
+    // Build query condition with optional ScreenID filter
     QString queryCondition = m_dateRange;
-    if (!m_searchScreenId.isEmpty()) {
-        queryCondition += QString(" AND ScreenID = '%1'").arg(m_searchScreenId);
-        qDebug() << "ScreenID filter:" << m_searchScreenId;
-    }
-
-    // For aoidefect table, no ScreenID column
-    QString aoiDefectCondition = m_dateRange;
+    //if (!m_searchScreenId.isEmpty()) {
+    //    queryCondition += QString(" AND ScreenID = '%1'").arg(m_searchScreenId);
+    //    qDebug() << "ScreenID filter:" << m_searchScreenId;
+    //}
 
     // Get time format based on time range
     QString timeFormat;
-    if (m_timeRange == "????") {
+    if (m_timeRange == "按小时") {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
-    } else if (m_timeRange == "????") {
+    } else if (m_timeRange == "按天") {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d')";
     } else {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
@@ -2386,20 +2368,16 @@ void DataLoaderThread::run()
                SUM(IF(AOIResult != 'OK', 1, 0)) as fail_cnt
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
         WHERE %2
-        GROUP BY %1, PlatformID
-        ORDER BY %1, PlatformID
+        GROUP BY time_period, PlatformID
+        ORDER BY time_period, PlatformID
     )").arg(timeFormat).arg(queryCondition);
-    qDebug() << "Platform trend query:" << platformTrendQuery;
 
     QSqlQuery platformTrendQ(db);
     platformTrendQ.setForwardOnly(true);
     QMap<QString, QMap<int, QPair<int, int>>> platformTrendData;
 
     if (platformTrendQ.exec(platformTrendQuery)) {
-        qDebug() << "Platform trend query executed successfully";
-        int rowCount = 0;
         while (platformTrendQ.next()) {
-            rowCount++;
             QString period = platformTrendQ.value(0).toString();
             int platformId = platformTrendQ.value(1).toInt();
             int pass = platformTrendQ.value(2).toInt();
@@ -2407,7 +2385,6 @@ void DataLoaderThread::run()
             // Store data per platform
             platformTrendData[period][platformId] = qMakePair(pass, fail);
         }
-        qDebug() << "Platform trend rows returned:" << rowCount;
     } else {
         qDebug() << "Platform trend query failed:" << platformTrendQ.lastError().text();
     }
@@ -2420,24 +2397,19 @@ void DataLoaderThread::run()
         WHERE %2
         GROUP BY time_period, Type
         ORDER BY time_period
-    )").arg(timeFormat).arg(aoiDefectCondition);
-    qDebug() << "Defect trend query:" << defectTrendQuery;
+    )").arg(timeFormat).arg(queryCondition);
 
     QSqlQuery defectTrendQ(db);
     defectTrendQ.setForwardOnly(true);
     QMap<QString, QMap<QString, int>> defectTrendData;
 
     if (defectTrendQ.exec(defectTrendQuery)) {
-        qDebug() << "Defect trend query executed successfully";
-        int rowCount = 0;
         while (defectTrendQ.next()) {
-            rowCount++;
             QString period = defectTrendQ.value(0).toString();
             QString defectType = defectTrendQ.value(1).toString();
             int cnt = defectTrendQ.value(2).toInt();
             defectTrendData[period][defectType] = cnt;
         }
-        qDebug() << "Defect trend rows returned:" << rowCount;
     } else {
         qDebug() << "Defect trend query failed:" << defectTrendQ.lastError().text();
     }
@@ -2475,8 +2447,8 @@ void DataLoaderThread::run()
         SELECT %1 as time_period, PlatformID, AOIResult, COUNT(*) as cnt
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
         WHERE %2
-        GROUP BY %1, PlatformID, AOIResult
-        ORDER BY %1, PlatformID, AOIResult
+        GROUP BY time_period, PlatformID, AOIResult
+        ORDER BY time_period, PlatformID, AOIResult
     )").arg(timeFormat).arg(queryCondition);
 
     QSqlQuery platformAoiResultQ(db);
@@ -2516,13 +2488,13 @@ void DataLoaderThread::run()
         UNION ALL
         SELECT 'insp_total', '', COUNT(*), 0, SUM(IF(AOIResult = 'OK', 1, 0)), SUM(IF(AOIResult != 'OK', 1, 0))
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-        WHERE %2
+        WHERE %1
         UNION ALL
         SELECT 'insp_platform', '', PlatformID, PlatformID, SUM(IF(AOIResult = 'OK', 1, 0)), SUM(IF(AOIResult != 'OK', 1, 0))
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-        WHERE %2
+        WHERE %1
         GROUP BY PlatformID
-    )").arg(aoiDefectCondition).arg(queryCondition);
+    )").arg(queryCondition);
 
     QSqlQuery combinedQuery(db);
     combinedQuery.setForwardOnly(true);
@@ -2614,7 +2586,7 @@ void Defect_Data_Display::loadDefectMappingAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 3, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);
+        getDateTimeRange(timeRange), m_selectedDate, "", this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::defectMappingDataLoaded,
@@ -2648,7 +2620,7 @@ void Defect_Data_Display::loadTrendDataAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 4, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);
+        getDateTimeRange(timeRange), m_selectedDate, "", this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::trendDataLoaded,
@@ -2681,7 +2653,7 @@ void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 5, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);
+        getDateTimeRange(timeRange), m_selectedDate, "", this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::detailDataLoaded,
@@ -2733,22 +2705,13 @@ void TabDataLoaderThread::run()
         return;
     }
 
-    // Build query conditions - ScreenID only exists in ivs_lcd_inspectionresult
-    QString queryCondition = m_dateRange;
-    if (!m_searchScreenId.isEmpty()) {
-        queryCondition += QString(" AND ScreenID = '%1'").arg(m_searchScreenId);
-    }
-
-    // For aoidefect table, no ScreenID column
-    QString aoiDefectCondition = m_dateRange;
-
     if (m_tabIndex == 3) {
         QString queryStr = QString(R"(
             SELECT Pos_x, Pos_y, Type
             FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
             WHERE %1
             ORDER BY StartTime DESC
-        )").arg(aoiDefectCondition);
+        )").arg(m_dateRange);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2769,9 +2732,9 @@ void TabDataLoaderThread::run()
     }
     else if (m_tabIndex == 4) {
         QString timeFormat;
-        if (m_timeRange == "????") {
+        if (m_timeRange == "按小时") {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
-        } else if (m_timeRange == "????") {
+        } else if (m_timeRange == "按天") {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d')";
         } else {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
@@ -2791,11 +2754,11 @@ void TabDataLoaderThread::run()
             LEFT JOIN (
                 SELECT %1 as time_period, COUNT(*) as total_count
                 FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-                WHERE %3
+                WHERE %2
                 GROUP BY time_period
             ) total_counts ON defect_counts.time_period = total_counts.time_period
             ORDER BY defect_counts.time_period
-        )").arg(timeFormat).arg(aoiDefectCondition).arg(queryCondition);
+        )").arg(timeFormat).arg(m_dateRange);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2826,7 +2789,7 @@ void TabDataLoaderThread::run()
             WHERE %1
             GROUP BY Code_AOI, Grade_AOI
             ORDER BY Code_AOI, Grade_AOI
-        )").arg(queryCondition);
+        )").arg(m_dateRange);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2849,31 +2812,27 @@ void TabDataLoaderThread::run()
     }
     else if (m_tabIndex == 7) {  // TAB_LOCATION_ABNORMAL
         QString timeFormat;
-        if (m_timeRange == "????") {
+        if (m_timeRange == "按小时") {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
-        } else if (m_timeRange == "????") {
+        } else if (m_timeRange == "按天") {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d')";
         } else {
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
         }
 
-        // Query for "?????" status grouped by time period and MarkID (1-16)
+        // Query for "定位异常" status grouped by time period and MarkID (1-16)
         QString queryStr = QString(R"(
             SELECT
                 %1 as time_period,
                 MarkID,
                 COUNT(*) as abnormal_count
             FROM ivs_lcd_inspectionresult
-            WHERE %1
-              AND Status LIKE '%%?????%%'
+            WHERE %2
+              AND Status LIKE '%%定位异常%%'
               AND MarkID >= 1 AND MarkID <= 16
             GROUP BY time_period, MarkID
             ORDER BY time_period, MarkID
-        )").arg(queryCondition);
-
-        qDebug() << "Location Abnormal Query:";
-        qDebug() << queryStr;
-        qDebug() << "queryCondition:" << queryCondition;
+        )").arg(timeFormat).arg(m_dateRange);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2888,8 +2847,7 @@ void TabDataLoaderThread::run()
                 int count = query.value(2).toInt();
                 abnormalByPeriod[period][markId] = count;
             }
-            qDebug() << "Location Abnormal query returned" << abnormalByPeriod.size() << "time periods";
-            emit locationAbnormalDataLoaded(m_loadId, abnormalByPeriod);
+            emit locationAbnormalDataLoaded(abnormalByPeriod);
         } else {
             qDebug() << "Location abnormal query failed:" << query.lastError().text();
         }
@@ -2925,9 +2883,9 @@ void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
     }
 
     QString timeFormat;
-    if (timeRange == "????") {
+    if (timeRange == "按小时") {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d %H:00')";
-    } else if (timeRange == "????") {
+    } else if (timeRange == "按天") {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m-%d')";
     } else {
         timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
@@ -2940,7 +2898,7 @@ void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
             COUNT(*) as abnormal_count
         FROM ivs_lcd_inspectionresult
         WHERE %2
-          AND Status LIKE '%%?????%%'
+          AND Status LIKE '%%定位异常%%'
           AND MarkID >= 1 AND MarkID <= 16
         GROUP BY time_period, MarkID
         ORDER BY time_period, MarkID
@@ -2968,14 +2926,8 @@ void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
     QSqlDatabase::removeDatabase(connectionName);
 }
 
-void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange, int loadId)
+void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange)
 {
-    if (loadId < 0) {
-        ++m_locationAbnormalLoadId;
-        loadId = m_locationAbnormalLoadId;
-    }
-    int thisLoadId = loadId;
-
     if (m_isTabLoading) {
         if (m_tabWorkerThread) {
             m_tabWorkerThread->quit();
@@ -2987,36 +2939,27 @@ void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange
         m_isTabLoading = false;
     }
 
+    ++m_currentLoadId;
+    int thisLoadId = m_currentLoadId;
+
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 7, timeRange,  // TAB_LOCATION_ABNORMAL
-        getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);
+        getDateTimeRange(timeRange), m_selectedDate, "", this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::locationAbnormalDataLoaded,
-            this, [this](int loadId, const QMap<QString, QMap<int, int>>& abnormalByPeriod) {
-                if (loadId != m_locationAbnormalLoadId) {
-                    qDebug() << "LocationAbnormal: stale load" << loadId << "vs current" << m_locationAbnormalLoadId;
-                    return;
-                }
-                onDataLoaded_LocationAbnormal(abnormalByPeriod);
-            }, Qt::QueuedConnection);
+            this, &Defect_Data_Display::onDataLoaded_LocationAbnormal, Qt::QueuedConnection);
     connect(m_tabWorkerThread, &TabDataLoaderThread::finished,
             this, [this](int loadId, int tabIndex) {
-                if (loadId == m_locationAbnormalLoadId) {
+                if (loadId == m_currentLoadId) {
                     m_isTabLoading = false;
                 }
             }, Qt::QueuedConnection);
 
     m_tabWorkerThread->start();
-    qDebug() << "loadLocationAbnormalDataAsync: started thread with loadId" << thisLoadId;
 }
 
 void Defect_Data_Display::onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod)
 {
-    qDebug() << "=== onDataLoaded_LocationAbnormal called ===";
-    qDebug() << "abnormalByPeriod keys:" << abnormalByPeriod.keys();
-    qDebug() << "m_currentLoadId:" << m_currentLoadId;
-    qDebug() << "Stale check passed";
-
     m_locationAbnormalData = abnormalByPeriod;
 
     // Update cache
@@ -3053,16 +2996,16 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
 
     // Generate time periods based on time range type
     QList<QString> periods;
-    if (timeRange == "????") {
+    if (timeRange == "按小时") {
         for (int h = 0; h < 24; ++h) {
             periods << QString("%1 %2:00").arg(m_selectedDate.toString("yyyy-MM-dd")).arg(h, 2, 10, QChar('0'));
         }
-    } else if (timeRange == "????") {
+    } else if (timeRange == "按天") {
         int daysInMonth = m_selectedDate.daysInMonth();
         for (int d = 1; d <= daysInMonth; ++d) {
             periods << QString("%1-%2").arg(m_selectedDate.toString("yyyy-MM")).arg(d, 2, 10, QChar('0'));
         }
-    } else if (timeRange == "????") {
+    } else if (timeRange == "按月") {
         for (int m = 1; m <= 12; ++m) {
             periods << QString("%1-%2").arg(m_selectedDate.year()).arg(m, 2, 10, QChar('0'));
         }
@@ -3071,7 +3014,7 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
         std::sort(periods.begin(), periods.end());
     }
 
-    // Page 0: ?????????????????????????
+    // Page 0: 按时间统计（总数，不区分工位）
     {
         QFrame* frame = frames[0];
 
@@ -3093,14 +3036,15 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
 
         QStringList categories;
         int maxCategories;
-        if (timeRange == "????") {
+        if (timeRange == "按小时") {
             maxCategories = 24;
-        } else if (timeRange == "????") {
-            maxCategories = 31;  // ??????31??
+        } else if (timeRange == "按天") {
+            maxCategories = 31;  // 最多显示31天
         } else {
-            maxCategories = 12;  // ????
+            maxCategories = 12;  // 按月
         }
 
+        QBarSet* barSet = new QBarSet("");
         for (int j = 0; j < periods.size() && j < maxCategories; ++j) {
             QString period = periods[j];
             int totalCount = 0;
@@ -3109,7 +3053,6 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
                 totalCount += it.value();
             }
 
-            // Calculate shortLabel
             QString shortLabel;
             if (period.contains(":")) {
                 shortLabel = period.mid(period.lastIndexOf(" ") + 1, 2);
@@ -3126,17 +3069,19 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
 
             qDebug() << "Period:" << period << "totalCount:" << totalCount << "shortLabel:" << shortLabel;
 
-            QBarSet* barSet = new QBarSet("");
-            *barSet << totalCount;
-            barSet->setColor(QColor(0, 200, 255));
-            barSet->setLabelColor(QColor(234, 234, 234));
-            barSeries->append(barSet);
+            //if (totalCount > 0) {
+                *barSet << totalCount;
+                barSet->setColor(QColor(0, 200, 255));
+                barSet->setLabelColor(QColor(234, 234, 234));
+            //}
             categories << shortLabel;
         }
+
+        barSeries->append(barSet);
         // Create chart
         QChart* chart = new QChart();
         chart->addSeries(barSeries);
-        chart->setTitle("?????????????");
+        chart->setTitle("定位异常总数趋势");
         chart->setAnimationOptions(QChart::NoAnimation);
         chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
         chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -3217,9 +3162,9 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
 
             QStringList categories;
             int maxCategories;
-            if (timeRange == "????") {
+            if (timeRange == "按小时") {
                 maxCategories = 24;
-            } else if (timeRange == "????") {
+            } else if (timeRange == "按天") {
                 maxCategories = 31;
             } else {
                 maxCategories = 12;
@@ -3261,7 +3206,7 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
             // Create chart
             QChart* chart = new QChart();
             chart->addSeries(barSeries);
-            chart->setTitle(QString("??? %1").arg(markId));
+            chart->setTitle(QString("工位 %1").arg(markId));
             chart->setAnimationOptions(QChart::NoAnimation);
             chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
             chart->setTitleBrush(QBrush(QColor(0, 217, 255)));

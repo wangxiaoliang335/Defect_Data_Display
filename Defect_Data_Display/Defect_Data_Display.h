@@ -107,7 +107,6 @@ private:
     TabDataLoaderThread* m_tabWorkerThread;
     QMutex m_queryMutex;
     int m_currentLoadId;
-    int m_locationAbnormalLoadId;
 
     QPoint m_dragPosition;
     bool m_isDragging;
@@ -162,7 +161,7 @@ private:
 
     // Location Abnormal functions
     void loadLocationAbnormalData(const QString& timeRange);
-    void loadLocationAbnormalDataAsync(const QString& timeRange, int loadId = -1);
+    void loadLocationAbnormalDataAsync(const QString& timeRange);
     void updateLocationAbnormalChart(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count
@@ -218,7 +217,7 @@ signals:
     void defectMappingDataLoaded(const QList<QPair<int, int>>& positions, const QStringList& types);
     void trendDataLoaded(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
     void detailDataLoaded(const QList<QVariantList>& defectDetails);
-    void locationAbnormalDataLoaded(int loadId, const QMap<QString, QMap<int, int>>& abnormalByPeriod);
+    void locationAbnormalDataLoaded(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void finished(int loadId, int tabIndex);
 
 protected:
