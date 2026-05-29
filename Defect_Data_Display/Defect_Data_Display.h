@@ -107,6 +107,7 @@ private:
     TabDataLoaderThread* m_tabWorkerThread;
     QMutex m_queryMutex;
     int m_currentLoadId;
+    int m_locationAbnormalLoadId;
 
     QPoint m_dragPosition;
     bool m_isDragging;
