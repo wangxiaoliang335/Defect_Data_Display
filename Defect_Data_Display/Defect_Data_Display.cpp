@@ -2385,13 +2385,17 @@ void DataLoaderThread::run()
         GROUP BY time_period, PlatformID
         ORDER BY time_period, PlatformID
     )").arg(timeFormat).arg(queryCondition);
+    qDebug() << "Platform trend query:" << platformTrendQuery;
 
     QSqlQuery platformTrendQ(db);
     platformTrendQ.setForwardOnly(true);
     QMap<QString, QMap<int, QPair<int, int>>> platformTrendData;
 
     if (platformTrendQ.exec(platformTrendQuery)) {
+        qDebug() << "Platform trend query executed successfully";
+        int rowCount = 0;
         while (platformTrendQ.next()) {
+            rowCount++;
             QString period = platformTrendQ.value(0).toString();
             int platformId = platformTrendQ.value(1).toInt();
             int pass = platformTrendQ.value(2).toInt();
@@ -2399,6 +2403,7 @@ void DataLoaderThread::run()
             // Store data per platform
             platformTrendData[period][platformId] = qMakePair(pass, fail);
         }
+        qDebug() << "Platform trend rows returned:" << rowCount;
     } else {
         qDebug() << "Platform trend query failed:" << platformTrendQ.lastError().text();
     }
