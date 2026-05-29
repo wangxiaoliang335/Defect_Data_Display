@@ -520,7 +520,7 @@ void Defect_Data_Display::onDateChanged(const QDate& date)
 
     // Clear ScreenID filter when date changes - only search button should filter by ScreenID
     m_searchScreenId = "";
-    ui.lineEditScreenId->clear();
+    ui.searchEdit->clear();
 
     // Invalidate location abnormal cache when date changes
     m_locationAbnormalCache.timestamp = 0;
