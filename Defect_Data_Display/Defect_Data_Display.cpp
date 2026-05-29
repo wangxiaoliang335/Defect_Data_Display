@@ -2859,6 +2859,10 @@ void TabDataLoaderThread::run()
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
         }
 
+        qDebug() << "Location Abnormal Query:";
+        qDebug() << queryStr;
+        qDebug() << "queryCondition:" << queryCondition;
+
         // Query for "定位异常" status grouped by time period and MarkID (1-16)
         QString queryStr = QString(R"(
             SELECT
@@ -2886,6 +2890,7 @@ void TabDataLoaderThread::run()
                 int count = query.value(2).toInt();
                 abnormalByPeriod[period][markId] = count;
             }
+            qDebug() << "Location Abnormal query returned" << abnormalByPeriod.size() << "time periods";
             emit locationAbnormalDataLoaded(m_loadId, abnormalByPeriod);
         } else {
             qDebug() << "Location abnormal query failed:" << query.lastError().text();
