@@ -2993,10 +2993,15 @@ void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange
             }, Qt::QueuedConnection);
 
     m_tabWorkerThread->start();
+    qDebug() << "loadLocationAbnormalDataAsync: started thread with loadId" << thisLoadId;
 }
 
 void Defect_Data_Display::onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod)
 {
+    qDebug() << "=== onDataLoaded_LocationAbnormal called ===";
+    qDebug() << "abnormalByPeriod keys:" << abnormalByPeriod.keys();
+    qDebug() << "m_currentLoadId:" << m_currentLoadId;
+
     m_locationAbnormalData = abnormalByPeriod;
 
     // Update cache
