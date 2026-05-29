@@ -2586,7 +2586,7 @@ void Defect_Data_Display::loadDefectMappingAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 3, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, "", this);
+        getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::defectMappingDataLoaded,
@@ -2620,7 +2620,7 @@ void Defect_Data_Display::loadTrendDataAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 4, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, "", this);
+        getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::trendDataLoaded,
@@ -2653,7 +2653,7 @@ void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 5, timeRange,
-        getDateTimeRange(timeRange), m_selectedDate, "", this);
+        getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::detailDataLoaded,
@@ -2705,13 +2705,19 @@ void TabDataLoaderThread::run()
         return;
     }
 
+    // Build query condition with optional ScreenID filter
+    QString queryCondition = m_dateRange;
+    if (!m_searchScreenId.isEmpty()) {
+        queryCondition += QString(" AND ScreenID = '%1'").arg(m_searchScreenId);
+    }
+
     if (m_tabIndex == 3) {
         QString queryStr = QString(R"(
             SELECT Pos_x, Pos_y, Type
             FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
             WHERE %1
             ORDER BY StartTime DESC
-        )").arg(m_dateRange);
+        )").arg(queryCondition);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2758,7 +2764,7 @@ void TabDataLoaderThread::run()
                 GROUP BY time_period
             ) total_counts ON defect_counts.time_period = total_counts.time_period
             ORDER BY defect_counts.time_period
-        )").arg(timeFormat).arg(m_dateRange);
+        )").arg(timeFormat).arg(queryCondition);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2789,7 +2795,7 @@ void TabDataLoaderThread::run()
             WHERE %1
             GROUP BY Code_AOI, Grade_AOI
             ORDER BY Code_AOI, Grade_AOI
-        )").arg(m_dateRange);
+        )").arg(queryCondition);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2827,12 +2833,12 @@ void TabDataLoaderThread::run()
                 MarkID,
                 COUNT(*) as abnormal_count
             FROM ivs_lcd_inspectionresult
-            WHERE %2
+            WHERE %1
               AND Status LIKE '%%定位异常%%'
               AND MarkID >= 1 AND MarkID <= 16
             GROUP BY time_period, MarkID
             ORDER BY time_period, MarkID
-        )").arg(timeFormat).arg(m_dateRange);
+        )").arg(queryCondition);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2943,7 +2949,7 @@ void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange
     int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 7, timeRange,  // TAB_LOCATION_ABNORMAL
-        getDateTimeRange(timeRange), m_selectedDate, "", this);
+        getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);
     m_isTabLoading = true;
 
     connect(m_tabWorkerThread, &TabDataLoaderThread::locationAbnormalDataLoaded,
@@ -3044,7 +3050,6 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
             maxCategories = 12;  // 按月
         }
 
-        QBarSet* barSet = new QBarSet("");
         for (int j = 0; j < periods.size() && j < maxCategories; ++j) {
             QString period = periods[j];
             int totalCount = 0;
@@ -3053,6 +3058,7 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
                 totalCount += it.value();
             }
 
+            // Calculate shortLabel
             QString shortLabel;
             if (period.contains(":")) {
                 shortLabel = period.mid(period.lastIndexOf(" ") + 1, 2);
@@ -3069,15 +3075,13 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
 
             qDebug() << "Period:" << period << "totalCount:" << totalCount << "shortLabel:" << shortLabel;
 
-            //if (totalCount > 0) {
-                *barSet << totalCount;
-                barSet->setColor(QColor(0, 200, 255));
-                barSet->setLabelColor(QColor(234, 234, 234));
-            //}
+            QBarSet* barSet = new QBarSet("");
+            *barSet << totalCount;
+            barSet->setColor(QColor(0, 200, 255));
+            barSet->setLabelColor(QColor(234, 234, 234));
+            barSeries->append(barSet);
             categories << shortLabel;
         }
-
-        barSeries->append(barSet);
         // Create chart
         QChart* chart = new QChart();
         chart->addSeries(barSeries);
