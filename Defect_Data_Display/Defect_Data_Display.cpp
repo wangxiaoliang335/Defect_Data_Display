@@ -2382,8 +2382,8 @@ void DataLoaderThread::run()
                SUM(IF(AOIResult != 'OK', 1, 0)) as fail_cnt
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
         WHERE %2
-        GROUP BY time_period, PlatformID
-        ORDER BY time_period, PlatformID
+        GROUP BY %1, PlatformID
+        ORDER BY %1, PlatformID
     )").arg(timeFormat).arg(queryCondition);
     qDebug() << "Platform trend query:" << platformTrendQuery;
 
@@ -2471,8 +2471,8 @@ void DataLoaderThread::run()
         SELECT %1 as time_period, PlatformID, AOIResult, COUNT(*) as cnt
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
         WHERE %2
-        GROUP BY time_period, PlatformID, AOIResult
-        ORDER BY time_period, PlatformID, AOIResult
+        GROUP BY %1, PlatformID, AOIResult
+        ORDER BY %1, PlatformID, AOIResult
     )").arg(timeFormat).arg(queryCondition);
 
     QSqlQuery platformAoiResultQ(db);
