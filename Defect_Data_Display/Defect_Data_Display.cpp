@@ -2354,12 +2354,15 @@ void DataLoaderThread::run()
     qDebug() << "Time range:" << m_timeRange;
     qDebug() << "Date range:" << m_dateRange;
 
-    // Build query condition with optional ScreenID filter
+    // Build query conditions - ScreenID only exists in ivs_lcd_inspectionresult
     QString queryCondition = m_dateRange;
     if (!m_searchScreenId.isEmpty()) {
         queryCondition += QString(" AND ScreenID = '%1'").arg(m_searchScreenId);
         qDebug() << "ScreenID filter:" << m_searchScreenId;
     }
+
+    // For aoidefect table, no ScreenID column
+    QString aoiDefectCondition = m_dateRange;
 
     // Get time format based on time range
     QString timeFormat;
@@ -2408,7 +2411,7 @@ void DataLoaderThread::run()
         WHERE %2
         GROUP BY time_period, Type
         ORDER BY time_period
-    )").arg(timeFormat).arg(queryCondition);
+    )").arg(timeFormat).arg(aoiDefectCondition);
 
     QSqlQuery defectTrendQ(db);
     defectTrendQ.setForwardOnly(true);
@@ -2499,13 +2502,13 @@ void DataLoaderThread::run()
         UNION ALL
         SELECT 'insp_total', '', COUNT(*), 0, SUM(IF(AOIResult = 'OK', 1, 0)), SUM(IF(AOIResult != 'OK', 1, 0))
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-        WHERE %1
+        WHERE %2
         UNION ALL
         SELECT 'insp_platform', '', PlatformID, PlatformID, SUM(IF(AOIResult = 'OK', 1, 0)), SUM(IF(AOIResult != 'OK', 1, 0))
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-        WHERE %1
+        WHERE %2
         GROUP BY PlatformID
-    )").arg(queryCondition);
+    )").arg(aoiDefectCondition).arg(queryCondition);
 
     QSqlQuery combinedQuery(db);
     combinedQuery.setForwardOnly(true);
@@ -2716,11 +2719,14 @@ void TabDataLoaderThread::run()
         return;
     }
 
-    // Build query condition with optional ScreenID filter
+    // Build query conditions - ScreenID only exists in ivs_lcd_inspectionresult
     QString queryCondition = m_dateRange;
     if (!m_searchScreenId.isEmpty()) {
         queryCondition += QString(" AND ScreenID = '%1'").arg(m_searchScreenId);
     }
+
+    // For aoidefect table, no ScreenID column
+    QString aoiDefectCondition = m_dateRange;
 
     if (m_tabIndex == 3) {
         QString queryStr = QString(R"(
@@ -2728,7 +2734,7 @@ void TabDataLoaderThread::run()
             FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
             WHERE %1
             ORDER BY StartTime DESC
-        )").arg(queryCondition);
+        )").arg(aoiDefectCondition);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -2771,11 +2777,11 @@ void TabDataLoaderThread::run()
             LEFT JOIN (
                 SELECT %1 as time_period, COUNT(*) as total_count
                 FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-                WHERE %2
+                WHERE %3
                 GROUP BY time_period
             ) total_counts ON defect_counts.time_period = total_counts.time_period
             ORDER BY defect_counts.time_period
-        )").arg(timeFormat).arg(queryCondition);
+        )").arg(timeFormat).arg(aoiDefectCondition).arg(queryCondition);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
