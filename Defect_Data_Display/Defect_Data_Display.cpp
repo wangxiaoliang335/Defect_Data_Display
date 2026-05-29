@@ -2859,10 +2859,6 @@ void TabDataLoaderThread::run()
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
         }
 
-        qDebug() << "Location Abnormal Query:";
-        qDebug() << queryStr;
-        qDebug() << "queryCondition:" << queryCondition;
-
         // Query for "定位异常" status grouped by time period and MarkID (1-16)
         QString queryStr = QString(R"(
             SELECT
@@ -2876,6 +2872,10 @@ void TabDataLoaderThread::run()
             GROUP BY time_period, MarkID
             ORDER BY time_period, MarkID
         )").arg(queryCondition);
+
+        qDebug() << "Location Abnormal Query:";
+        qDebug() << queryStr;
+        qDebug() << "queryCondition:" << queryCondition;
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
