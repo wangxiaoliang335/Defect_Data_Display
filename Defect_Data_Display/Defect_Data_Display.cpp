@@ -515,6 +515,7 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
 void Defect_Data_Display::onDateChanged(const QDate& date)
 {
     qDebug() << "=== onDateChanged called ===" << date.toString();
+    qDebug() << "m_selectedDate updated, current m_searchScreenId:" << m_searchScreenId;
     m_selectedDate = date;
 
     // Invalidate location abnormal cache when date changes
@@ -545,6 +546,8 @@ void Defect_Data_Display::onTabChanged(int index)
         case 1:
         case 2: {
             qDebug() << "Index 0-2: checking if platform data needs refresh";
+            qDebug() << "m_platformTrendData.size():" << m_platformTrendData.size();
+            qDebug() << "m_searchScreenId:" << m_searchScreenId;
             if (!m_platformTrendData.isEmpty()) {
                 qDebug() << "Refreshing platform charts";
                 updatePlatformTrendChart(m_platformTrendData);
@@ -854,6 +857,7 @@ bool Defect_Data_Display::connectToDatabase()
 void Defect_Data_Display::onRefreshClicked()
 {
     qDebug() << "=== onRefreshClicked called ===";
+    qDebug() << "m_searchScreenId:" << m_searchScreenId;
     qDebug() << "m_isLoading:" << m_isLoading;
 
     // Clear all charts to show empty state
@@ -1068,7 +1072,9 @@ void Defect_Data_Display::onDataLoaded_Detail(const QList<QVariantList>& defectD
 
 void Defect_Data_Display::onDataLoaded_PlatformTrend(const QMap<QString, QMap<int, QPair<int, int>>>& platformTrendData, const QString& timeRange)
 {
-    qDebug() << "=== onDataLoaded_PlatformTrend called ===" << "time periods:" << platformTrendData.size();
+    qDebug() << "=== onDataLoaded_PlatformTrend called ===";
+    qDebug() << "time periods:" << platformTrendData.size();
+    qDebug() << "current m_searchScreenId:" << m_searchScreenId;
 
     m_platformTrendData = platformTrendData;
     m_currentTimeFormat = timeRange;
