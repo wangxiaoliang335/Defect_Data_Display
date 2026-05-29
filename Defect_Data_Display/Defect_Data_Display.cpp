@@ -543,9 +543,14 @@ void Defect_Data_Display::onTabChanged(int index)
         switch (index) {
         case 0:
         case 1:
-        case 2:
-            qDebug() << "Index 0-2: doing nothing";
+        case 2: {
+            qDebug() << "Index 0-2: checking if platform data needs refresh";
+            if (!m_platformTrendData.isEmpty()) {
+                qDebug() << "Refreshing platform charts";
+                updatePlatformTrendChart(m_platformTrendData);
+            }
             break;
+        }
         case 3: {
             qDebug() << "Index 3: Defect Mapping";
             CachedTabData* cache = &m_defectMappingCache;
