@@ -528,8 +528,9 @@ void Defect_Data_Display::onDateChanged(const QDate& date)
     // If currently on location abnormal tab (index 6 or 7), reload data immediately
     int currentTabIndex = ui.tabWidget->currentIndex();
     if (currentTabIndex == 6 || currentTabIndex == 7) {
+        ++m_currentLoadId;  // Increment first
         QString timeRange = ui.comboTimeRange->currentText();
-        loadLocationAbnormalDataAsync(timeRange);
+        loadLocationAbnormalDataAsync(timeRange, m_currentLoadId);  // Pass the loadId
     }
 
     // Always refresh main page data when date changes
@@ -598,7 +599,7 @@ void Defect_Data_Display::onTabChanged(int index)
                 updateLocationAbnormalChart(m_locationAbnormalData);
             } else {
                 qDebug() << "Cache invalid, calling loadLocationAbnormalDataAsync";
-                loadLocationAbnormalDataAsync(timeRange);
+                loadLocationAbnormalDataAsync(timeRange, -1);
             }
             break;
         }
@@ -610,7 +611,7 @@ void Defect_Data_Display::onTabChanged(int index)
                 updateLocationAbnormalChart(m_locationAbnormalData);
             } else {
                 qDebug() << "Cache invalid, calling loadLocationAbnormalDataAsync";
-                loadLocationAbnormalDataAsync(timeRange);
+                loadLocationAbnormalDataAsync(timeRange, -1);
             }
             break;
         }
@@ -893,10 +894,10 @@ void Defect_Data_Display::onRefreshClicked()
     ui.labelStatus->setText("Loading...");
     ui.labelStatus->setStyleSheet("color: #ffaa00;");
 
-    m_isLoading = true;
-    ui.btnRefresh->setEnabled(false);
+    qDebug() << "onRefreshClicked: about to increment m_currentLoadId, current value:" << m_currentLoadId;
     ++m_currentLoadId;
     int thisLoadId = m_currentLoadId;
+    qDebug() << "onRefreshClicked: new loadId:" << thisLoadId;
 
     qDebug() << "Creating new worker thread with loadId:" << thisLoadId;
     m_workerThread = new DataLoaderThread(thisLoadId, timeRange, getDateTimeRange(timeRange), m_searchScreenId, this);
@@ -988,8 +989,9 @@ void Defect_Data_Display::onTimeRangeChanged(int index)
     // If currently on location abnormal tab (index 6 or 7), reload data immediately
     int currentTabIndex = ui.tabWidget->currentIndex();
     if (currentTabIndex == 6 || currentTabIndex == 7) {
+        ++m_currentLoadId;  // Increment first
         QString timeRange = ui.comboTimeRange->currentText();
-        loadLocationAbnormalDataAsync(timeRange);
+        loadLocationAbnormalDataAsync(timeRange, m_currentLoadId);  // Pass the loadId
     }
 
     // Always refresh main page data when time range changes
@@ -2963,8 +2965,14 @@ void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
     QSqlDatabase::removeDatabase(connectionName);
 }
 
-void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange)
+void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange, int loadId)
 {
+    if (loadId < 0) {
+        ++m_currentLoadId;
+        loadId = m_currentLoadId;
+    }
+    int thisLoadId = loadId;
+
     if (m_isTabLoading) {
         if (m_tabWorkerThread) {
             m_tabWorkerThread->quit();
@@ -2975,9 +2983,6 @@ void Defect_Data_Display::loadLocationAbnormalDataAsync(const QString& timeRange
         }
         m_isTabLoading = false;
     }
-
-    ++m_currentLoadId;
-    int thisLoadId = m_currentLoadId;
 
     m_tabWorkerThread = new TabDataLoaderThread(thisLoadId, 7, timeRange,  // TAB_LOCATION_ABNORMAL
         getDateTimeRange(timeRange), m_selectedDate, m_searchScreenId, this);

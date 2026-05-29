@@ -161,7 +161,7 @@ private:
 
     // Location Abnormal functions
     void loadLocationAbnormalData(const QString& timeRange);
-    void loadLocationAbnormalDataAsync(const QString& timeRange);
+    void loadLocationAbnormalDataAsync(const QString& timeRange, int loadId = -1);
     void updateLocationAbnormalChart(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count
