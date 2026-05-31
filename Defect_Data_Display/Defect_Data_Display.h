@@ -64,6 +64,7 @@ private slots:
     void onMinimizeClicked();
     void onCloseClicked();
     void onTabChanged(int index);
+    void onPlatformTabChanged(int index);
     void onDateChanged(const QDate& date);
     void onSearchClicked();
     void performQrCodeSearch(const QString& screenId);

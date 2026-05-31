@@ -74,6 +74,7 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     connect(ui.btnMinimize, &QPushButton::clicked, this, &Defect_Data_Display::onMinimizeClicked);
     connect(ui.btnClose, &QPushButton::clicked, this, &Defect_Data_Display::onCloseClicked);
     connect(ui.tabWidget, &QTabWidget::currentChanged, this, &Defect_Data_Display::onTabChanged);
+    connect(ui.tabPlatformPages, &QTabWidget::currentChanged, this, &Defect_Data_Display::onPlatformTabChanged);
     connect(ui.searchEdit, &QLineEdit::returnPressed, this, &Defect_Data_Display::onSearchClicked);
     connect(ui.btnSearch, &QPushButton::clicked, this, &Defect_Data_Display::onSearchClicked);
 
@@ -577,16 +578,97 @@ void Defect_Data_Display::onTabChanged(int index)
         case 0:
         case 1:
         case 2:
-            qDebug() << "Index 0-2: doing nothing";
-            break;
         case 3: {
-            qDebug() << "Index 3: Defect Mapping";
-            CachedTabData* cache = &m_defectMappingCache;
-            if (isCacheValid(cache, timeRange, m_selectedDate)) {
-                updateDefectMappingChart(cache->positions, cache->types);
-            } else {
-                loadDefectMappingAsync(timeRange);
+            // Platform chart tab (index 0-3)
+            // Data is already loaded via onDataLoaded_PlatformAoiResult
+            // Just need to update labels after tab switch (chart needs time to layout)
+            int platformIdx = index;
+            qDebug() << "Index 0-3: Platform" << platformIdx << "tab switched to, scheduling label update";
+            
+            // Get the chart for this platform
+            void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+            QChartView* chartView = (QChartView*)chartViewPtrs[platformIdx];
+            if (!chartView) break;
+            QChart* chart = chartView->chart();
+            
+            // Clear old text items
+            if (chart->scene()) {
+                QList<QGraphicsItem*> items = chart->scene()->items();
+                for (QGraphicsItem* item : items) {
+                    if (qgraphicsitem_cast<QGraphicsSimpleTextItem*>(item)) {
+                        chart->scene()->removeItem(item);
+                        delete item;
+                    }
+                }
             }
+            
+            // Wait for layout and redraw labels
+            QTimer::singleShot(100, this, [this, chartView, chart, platformIdx]() {
+                QRectF plotArea = chart->plotArea();
+                qDebug() << "[TabSwitch] Platform" << platformIdx << "plotArea after switch:" << plotArea;
+                
+                if (plotArea.width() < 200 || plotArea.height() < 50) {
+                    qDebug() << "[TabSwitch] Platform" << platformIdx << "plotArea still invalid, skipping labels";
+                    return;
+                }
+                
+                // Get time categories from axis
+                QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
+                QStringList timeCategories;
+                if (!axesX.isEmpty()) {
+                    QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
+                    if (axisX) timeCategories = axisX->categories();
+                }
+                
+                // Get column totals from the stacked series
+                QList<QAbstractSeries*> seriesList = chart->series();
+                if (seriesList.isEmpty()) return;
+                QStackedBarSeries* stackedSeries = qobject_cast<QStackedBarSeries*>(seriesList.first());
+                if (!stackedSeries) return;
+                
+                // Calculate totals from the bar sets
+                QList<int> columnTotals(timeCategories.size(), 0);
+                QList<QBarSet*> barSets = stackedSeries->barSets();
+                for (QBarSet* barSet : barSets) {
+                    for (int ti = 0; ti < timeCategories.size() && ti < barSet->count(); ++ti) {
+                        columnTotals[ti] += (int)barSet->at(ti);
+                    }
+                }
+                
+                // Get Y axis
+                QList<QAbstractAxis*> axesY = chart->axes(Qt::Vertical);
+                if (axesY.isEmpty()) return;
+                QValueAxis* axisY = qobject_cast<QValueAxis*>(axesY.first());
+                if (!axisY) return;
+                
+                // Draw labels
+                qDebug() << "[TabSwitch] Platform" << platformIdx << "Drawing" << columnTotals.size() << "labels";
+                int numBars = timeCategories.size();
+                qreal barGroupWidth = plotArea.width() / numBars;
+                qreal barWidth = barGroupWidth * 0.7;
+                qreal barLeftMargin = barGroupWidth * 0.15;
+                qreal yMin = axisY->min();
+                qreal yMax = axisY->max();
+                qreal yRange = yMax - yMin;
+                
+                for (int ti = 0; ti < numBars; ++ti) {
+                    if (columnTotals[ti] <= 0) continue;
+                    
+                    qreal barCenterX = plotArea.left() + barLeftMargin + ti * barGroupWidth + barWidth / 2;
+                    qreal normalizedValue = (columnTotals[ti] - yMin) / yRange;
+                    qreal barTopY = plotArea.bottom() - normalizedValue * plotArea.height();
+                    
+                    QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(QString::number(columnTotals[ti]));
+                    textItem->setFont(QFont("Arial", 9, QFont::Bold));
+                    textItem->setBrush(QBrush(QColor(255, 255, 255)));
+                    textItem->setZValue(100);
+                    chart->scene()->addItem(textItem);
+                    
+                    qreal textX = barCenterX - textItem->boundingRect().width() / 2;
+                    qreal textY = barTopY - textItem->boundingRect().height() - 3;
+                    textItem->setPos(textX, textY);
+                }
+            });
             break;
         }
         case 4: {
@@ -642,6 +724,99 @@ void Defect_Data_Display::onTabChanged(int index)
         qDebug() << "Timer lambda: about to exit switch";
     });
     qDebug() << "Timer::singleShot call completed for onTabChanged";
+}
+
+void Defect_Data_Display::onPlatformTabChanged(int index)
+{
+    qDebug() << "=== onPlatformTabChanged called with index:" << index << "===";
+
+    // Platform tab (index 0-3)
+    if (index < 0 || index > 3) return;
+
+    // Get the chart for this platform
+    void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+    QChartView* chartView = (QChartView*)chartViewPtrs[index];
+    if (!chartView) return;
+    QChart* chart = chartView->chart();
+
+    // Clear old text items
+    if (chart->scene()) {
+        QList<QGraphicsItem*> items = chart->scene()->items();
+        for (QGraphicsItem* item : items) {
+            if (qgraphicsitem_cast<QGraphicsSimpleTextItem*>(item)) {
+                chart->scene()->removeItem(item);
+                delete item;
+            }
+        }
+    }
+
+    // Wait for layout and redraw labels
+    QTimer::singleShot(100, this, [this, chartView, chart, index]() {
+        QRectF plotArea = chart->plotArea();
+        qDebug() << "[PlatformTab] Platform" << index << "plotArea after switch:" << plotArea;
+
+        if (plotArea.width() < 200 || plotArea.height() < 50) {
+            qDebug() << "[PlatformTab] Platform" << index << "plotArea still invalid, skipping labels";
+            return;
+        }
+
+        // Get time categories from axis
+        QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
+        QStringList timeCategories;
+        if (!axesX.isEmpty()) {
+            QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
+            if (axisX) timeCategories = axisX->categories();
+        }
+
+        // Get column totals from the stacked series
+        QList<QAbstractSeries*> seriesList = chart->series();
+        if (seriesList.isEmpty()) return;
+        QStackedBarSeries* stackedSeries = qobject_cast<QStackedBarSeries*>(seriesList.first());
+        if (!stackedSeries) return;
+
+        // Calculate totals from the bar sets
+        QList<int> columnTotals(timeCategories.size(), 0);
+        QList<QBarSet*> barSets = stackedSeries->barSets();
+        for (QBarSet* barSet : barSets) {
+            for (int ti = 0; ti < timeCategories.size() && ti < barSet->count(); ++ti) {
+                columnTotals[ti] += (int)barSet->at(ti);
+            }
+        }
+
+        // Get Y axis
+        QList<QAbstractAxis*> axesY = chart->axes(Qt::Vertical);
+        if (axesY.isEmpty()) return;
+        QValueAxis* axisY = qobject_cast<QValueAxis*>(axesY.first());
+        if (!axisY) return;
+
+        // Draw labels
+        qDebug() << "[PlatformTab] Platform" << index << "Drawing" << columnTotals.size() << "labels";
+        int numBars = timeCategories.size();
+        qreal barGroupWidth = plotArea.width() / numBars;
+        qreal barWidth = barGroupWidth * 0.7;
+        qreal barLeftMargin = barGroupWidth * 0.15;
+        qreal yMin = axisY->min();
+        qreal yMax = axisY->max();
+        qreal yRange = yMax - yMin;
+
+        for (int ti = 0; ti < numBars; ++ti) {
+            if (columnTotals[ti] <= 0) continue;
+
+            qreal barCenterX = plotArea.left() + barLeftMargin + ti * barGroupWidth + barWidth / 2;
+            qreal normalizedValue = (columnTotals[ti] - yMin) / yRange;
+            qreal barTopY = plotArea.bottom() - normalizedValue * plotArea.height();
+
+            QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(QString::number(columnTotals[ti]));
+            textItem->setFont(QFont("Arial", 9, QFont::Bold));
+            textItem->setBrush(QBrush(QColor(255, 255, 255)));
+            textItem->setZValue(100);
+            chart->scene()->addItem(textItem);
+
+            qreal textX = barCenterX - textItem->boundingRect().width() / 2;
+            qreal textY = barTopY - textItem->boundingRect().height() - 3;
+            textItem->setPos(textX, textY);
+        }
+    });
 }
 
 void Defect_Data_Display::updateDateTime()
@@ -2090,9 +2265,23 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
         // Wait for layout to complete, then add total labels
         if (!chart->scene()) continue;
         
-        // Use QTimer to defer label positioning until after layout is complete
-        QTimer::singleShot(50, this, [chart, chartView, timeCategories, columnTotals, axisY]() {
+        // Use simple single-shot with larger delay - chart should be ready after data is loaded
+        QTimer::singleShot(500, this, [chart, chartView, timeCategories, columnTotals, axisY, p]() {
             QRectF plotArea = chart->plotArea();
+            
+            // Check if plotArea is valid (has reasonable size)
+            bool validPlotArea = plotArea.width() > 200 && plotArea.height() > 50;
+            
+            qDebug() << "[Platform" << p << "] Delayed check, plotArea:" << plotArea << "valid:" << validPlotArea;
+            
+            if (!validPlotArea) {
+                qDebug() << "[Platform" << p << "] plotArea still not valid, skipping labels";
+                return;
+            }
+            
+            // Draw the labels
+            qDebug() << "[Platform" << p << "] Drawing labels";
+            
             int numBars = timeCategories.size();
             if (numBars == 0) return;
             
