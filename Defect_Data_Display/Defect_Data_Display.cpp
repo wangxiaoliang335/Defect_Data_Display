@@ -272,58 +272,92 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
 
     QString timeRange = ui.comboTimeRange->currentText();
     QString originalKey;
-    for (auto it = m_platformTrendData.constBegin(); it != m_platformTrendData.constEnd(); ++it) {
-        QString label = it.key();
-        if (timeRange == "按小时" && label.contains(" ")) {
-            if (label.split(" ").at(1).left(5) == timeKey) { originalKey = it.key(); break; }
-        } else if (timeRange == "按天" && label.contains("-")) {
-            QStringList parts = label.split("-");
-            if (parts.size() >= 3 && parts.at(2) == timeKey) { originalKey = it.key(); break; }
-        } else if (timeRange == "按月" && label == timeKey) {
-            originalKey = it.key();
-            break;
-        }
-    }
-
-    if (originalKey.isEmpty() || !m_platformTrendData.contains(originalKey)) return;
-    if (!m_platformTrendData[originalKey].contains(platformIdx)) return;
-
-    int pass = m_platformTrendData[originalKey][platformIdx].first;
-    int fail = m_platformTrendData[originalKey][platformIdx].second;
-
-    int total = pass + fail;
-
-    // Pass / Fail each on their own line
-    QString tipPassFail = QString(
-        "<div style='margin-bottom:12px;line-height:1.8'>"
-        "<div style='font-size:17px'><span style='color:#4ade80'>Pass : %1</span></div>"
-        "<div style='font-size:17px'><span style='color:#f87171'>Fail : %2</span></div>"
-        "</div>").arg(pass).arg(fail);
-
-    // AOI Result section - 显示 AOIResult 字段的各种值统计
-    QString section1;
-    if (!m_platformAoiResultData.isEmpty() && m_platformAoiResultData.contains(originalKey)
-        && m_platformAoiResultData[originalKey].contains(platformIdx)) {
-        const QMap<QString, int>& aoiMap = m_platformAoiResultData[originalKey][platformIdx];
-        for (auto ait = aoiMap.constBegin(); ait != aoiMap.constEnd(); ++ait) {
-            // 为不同类型设置不同颜色
-            QString color = "#f0f0f0";  // 默认白色
-            if (ait.key() == "OK") {
-                color = "#4ade80";  // 绿色
-            } else if (ait.key() == "NG") {
-                color = "#f87171";  // 红色
-            } else {
-                color = "#fbbf24";  // 黄色 - 其他类型
+    
+    // Check if we have stacked AOIResult data
+    bool hasStackedData = !m_platformAoiResultData.isEmpty();
+    
+    if (hasStackedData) {
+        // Find original key from m_platformAoiResultData
+        for (auto it = m_platformAoiResultData.constBegin(); it != m_platformAoiResultData.constEnd(); ++it) {
+            QString label = it.key();
+            if (timeRange == "按小时" && label.contains(" ")) {
+                if (label.split(" ").at(1).left(5) == timeKey) { originalKey = it.key(); break; }
+            } else if (timeRange == "按天" && label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3 && parts.at(2) == timeKey) { originalKey = it.key(); break; }
+            } else if (timeRange == "按月" && label == timeKey) {
+                originalKey = it.key(); break;
             }
-            section1 += QString("<div style='font-size:15px'><span style='color:%1'>%2 : %3</span></div>").arg(color).arg(ait.key()).arg(ait.value());
+        }
+    } else {
+        // Fallback to m_platformTrendData
+        for (auto it = m_platformTrendData.constBegin(); it != m_platformTrendData.constEnd(); ++it) {
+            QString label = it.key();
+            if (timeRange == "按小时" && label.contains(" ")) {
+                if (label.split(" ").at(1).left(5) == timeKey) { originalKey = it.key(); break; }
+            } else if (timeRange == "按天" && label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3 && parts.at(2) == timeKey) { originalKey = it.key(); break; }
+            } else if (timeRange == "按月" && label == timeKey) {
+                originalKey = it.key(); break;
+            }
         }
     }
-    QString tipBody1;
-    if (!section1.isEmpty()) {
-        tipBody1 = QString("<div style='margin-top:10px;line-height:1.6'>"
-                          "<div style='color:#00e5ff;font-size:15px;font-weight:bold;margin-bottom:8px'>AOI Result</div>"
-                          "%1"
-                          "</div>").arg(section1);
+
+    if (originalKey.isEmpty()) return;
+    
+    // Build tooltip content based on data type
+    QString tipPassFail;
+    int total = 0;
+    
+    if (hasStackedData) {
+        // Stacked bar - show AOIResult breakdown
+        if (!m_platformAoiResultData.contains(originalKey) || !m_platformAoiResultData[originalKey].contains(platformIdx)) return;
+        
+        const QMap<QString, int>& aoiMap = m_platformAoiResultData[originalKey][platformIdx];
+        
+        // Calculate total from AOIResult map
+        for (auto ait = aoiMap.constBegin(); ait != aoiMap.constEnd(); ++ait) {
+            total += ait.value();
+        }
+        
+        // Build AOIResult breakdown HTML
+        QString section1;
+        QList<QColor> resultColors;
+        resultColors << QColor(0, 255, 136) << QColor(255, 80, 80) << QColor(255, 200, 0)
+                    << QColor(0, 150, 255) << QColor(200, 100, 255) << QColor(255, 150, 150)
+                    << QColor(150, 200, 255) << QColor(200, 255, 150);
+        
+        int colorIdx = 0;
+        for (auto ait = aoiMap.constBegin(); ait != aoiMap.constEnd(); ++ait) {
+            QString colorHex = resultColors[colorIdx % resultColors.size()].name();
+            section1 += QString("<div style='font-size:15px'><span style='color:%1'>%2 : %3</span></div>")
+                .arg(colorHex).arg(ait.key()).arg(ait.value());
+            colorIdx++;
+        }
+        
+        QString tipBody1;
+        if (!section1.isEmpty()) {
+            tipBody1 = QString("<div style='margin-top:10px;line-height:1.6'>"
+                              "<div style='color:#00e5ff;font-size:15px;font-weight:bold;margin-bottom:8px'>AOI Result</div>"
+                              "%1"
+                              "</div>").arg(section1);
+        }
+        
+        tipPassFail = tipBody1;
+    } else {
+        // Non-stacked bar - show Pass/Fail
+        if (!m_platformTrendData.contains(originalKey) || !m_platformTrendData[originalKey].contains(platformIdx)) return;
+        
+        int pass = m_platformTrendData[originalKey][platformIdx].first;
+        int fail = m_platformTrendData[originalKey][platformIdx].second;
+        total = pass + fail;
+        
+        tipPassFail = QString(
+            "<div style='margin-bottom:12px;line-height:1.8'>"
+            "<div style='font-size:17px'><span style='color:#4ade80'>Pass : %1</span></div>"
+            "<div style='font-size:17px'><span style='color:#f87171'>Fail : %2</span></div>"
+            "</div>").arg(pass).arg(fail);
     }
 
     QString tip = QString(
@@ -334,9 +368,8 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
         "<span style='font-size:26px;font-weight:bold;color:#ffffff'>%1</span>"
         "</div>"
         "%2"
-        "%3"
         "</div>"
-    ).arg(total).arg(tipPassFail).arg(tipBody1);
+    ).arg(total).arg(tipPassFail);
 
     m_tooltipLabel->setText(tip);
 
@@ -2063,14 +2096,16 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
 
 void Defect_Data_Display::onDataLoaded_PlatformAoiResult(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories, const QString& timeRange)
 {
-    Q_UNUSED(aoiResultCategories);
-    Q_UNUSED(timeRange);
-
     // Save the data to member variable for tooltip usage
     m_platformAoiResultData = platformAoiResultData;
+    m_aoiResultCategories = aoiResultCategories;
     qDebug() << "[PlatformAoiResult] Saved" << m_platformAoiResultData.size() << "time periods";
 
-    if (!m_platformTrendData.isEmpty()) {
+    // Use stacked bar chart to show different AOIResult types
+    if (!platformAoiResultData.isEmpty() && !aoiResultCategories.isEmpty()) {
+        updatePlatformTrendChartStacked(platformAoiResultData, aoiResultCategories);
+    } else if (!m_platformTrendData.isEmpty()) {
+        // Fallback to non-stacked chart if no AOIResult detail
         updatePlatformTrendChart(m_platformTrendData);
     }
 }
