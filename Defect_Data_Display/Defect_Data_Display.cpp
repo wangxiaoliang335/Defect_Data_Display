@@ -47,6 +47,7 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_isTabLoading(false)
     , m_lastMainLoadTime(0)
     , m_tooltipLabel(nullptr)
+    , m_barClickDialog(nullptr)
 {
     setWindowFlags(Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -176,6 +177,13 @@ Defect_Data_Display::~Defect_Data_Display()
     if (m_db.isOpen()) {
         m_db.close();
     }
+    if (m_barClickDialog) {
+        if (m_barClickDialog->isVisible()) {
+            m_barClickDialog->close();
+        }
+        delete m_barClickDialog;
+        m_barClickDialog = nullptr;
+    }
 }
 
 void Defect_Data_Display::mousePressEvent(QMouseEvent* event)
@@ -232,6 +240,49 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
             if (cv && (cv == watched || cv->viewport() == watched)) {
                 m_tooltipLabel->hide();
                 break;
+            }
+        }
+    } else if (event->type() == QEvent::MouseButtonPress) {
+        QMouseEvent* me = static_cast<QMouseEvent*>(event);
+        if (me->button() == Qt::LeftButton) {
+            for (int p = 0; p < 4; ++p) {
+                void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+                QChartView* cv = (QChartView*)chartViewPtrs[p];
+                if (cv && (cv == watched || cv->viewport() == watched)) {
+                    QChart* chart = cv->chart();
+                    QList<QAbstractSeries*> seriesList = chart->series();
+                    if (!seriesList.isEmpty()) {
+                        QPointF chartPos = chart->mapToValue(QPointF(me->pos()), seriesList.first());
+
+                        QAbstractBarSeries* barSeries = qobject_cast<QAbstractBarSeries*>(seriesList.first());
+                        if (barSeries) {
+                            QRectF plotArea = chart->plotArea();
+                            qreal relX = (me->pos().x() - plotArea.left()) / plotArea.width();
+
+                            QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
+                            if (!axesX.isEmpty()) {
+                                QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
+                                if (axisX) {
+                                    QStringList categories = axisX->categories();
+                                    if (!categories.isEmpty()) {
+                                        int numCategories = categories.size();
+                                        int numBarSets = barSeries->count();
+                                        int totalBars = numCategories * numBarSets;
+                                        if (totalBars > 0) {
+                                            int barIndex = static_cast<int>(relX * totalBars);
+                                            int categoryIndex = barIndex / qMax(numBarSets, 1);
+                                            if (categoryIndex >= 0 && categoryIndex < categories.size()) {
+                                                QString timeKey = categories[categoryIndex];
+                                                showBarClickDialog(p, timeKey);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
             }
         }
     }
@@ -2633,6 +2684,7 @@ void DataLoaderThread::run()
         GROUP BY time_period, PlatformID
         ORDER BY time_period, PlatformID
     )").arg(timeFormat).arg(queryCondition);
+    qDebug() << "[Chart] Platform trend query:" << platformTrendQuery;
 
     QSqlQuery platformTrendQ(db);
     platformTrendQ.setForwardOnly(true);
@@ -2646,6 +2698,7 @@ void DataLoaderThread::run()
             int fail = platformTrendQ.value(3).toInt();
             // Store data per platform
             platformTrendData[period][platformId] = qMakePair(pass, fail);
+            qDebug() << "[Chart] Platform" << platformId << "Period" << period << "Pass:" << pass << "Fail:" << fail;
         }
     } else {
         qDebug() << "Platform trend query failed:" << platformTrendQ.lastError().text();
@@ -3523,5 +3576,380 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
     m_locationAbnormalCache.timestamp = QDateTime::currentMSecsSinceEpoch();
     m_locationAbnormalCache.timeRange = ui.comboTimeRange->currentText();
     m_locationAbnormalCache.date = m_selectedDate;
+}
+
+void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& timeKey)
+{
+    // Delete existing dialog if any
+    if (m_barClickDialog) {
+        m_barClickDialog->deleteLater();
+        m_barClickDialog = nullptr;
+    }
+
+    // Create new dialog
+    m_barClickDialog = new QDialog(this);
+    m_barClickDialog->setModal(true);
+    m_barClickDialog->resize(900, 600);
+
+    qDebug() << "[BarClickDialog] platformIdx:" << platformIdx << "timeKey:" << timeKey;
+
+    // Main layout
+    QVBoxLayout* mainLayout = new QVBoxLayout(m_barClickDialog);
+    mainLayout->setSpacing(10);
+    mainLayout->setContentsMargins(15, 15, 15, 15);
+    m_barClickDialog->installEventFilter(m_barClickDialog);
+
+    // Table widget
+    QTableWidget* tableWidget = new QTableWidget(m_barClickDialog);
+    tableWidget->setColumnCount(6);
+    tableWidget->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
+    tableWidget->setAlternatingRowColors(true);
+    tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
+    tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    tableWidget->horizontalHeader()->setStretchLastSection(true);
+    tableWidget->verticalHeader()->setVisible(false);
+
+    // Table styling
+    tableWidget->setStyleSheet(R"(
+        QTableWidget {
+            background-color: rgba(20, 35, 55, 220);
+            alternate-background-color: rgba(30, 50, 80, 180);
+            color: #e0f0ff;
+            border: 1px solid rgba(0, 217, 255, 80);
+            border-radius: 6px;
+            gridline-color: rgba(0, 217, 255, 40);
+            font-size: 13px;
+        }
+        QTableWidget::item {
+            padding: 5px;
+        }
+        QTableWidget::item:selected {
+            background-color: rgba(0, 150, 200, 150);
+            color: #ffffff;
+        }
+        QHeaderView::section {
+            background-color: rgba(0, 100, 150, 180);
+            color: #ffffff;
+            padding: 6px;
+            border: 1px solid rgba(0, 217, 255, 60);
+            font-weight: bold;
+            font-size: 13px;
+        }
+        QScrollBar:vertical {
+            background: rgba(20, 35, 55, 200);
+            width: 12px;
+            border-radius: 6px;
+        }
+        QScrollBar::handle:vertical {
+            background: rgba(0, 150, 200, 150);
+            border-radius: 5px;
+            min-height: 20px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: rgba(0, 200, 255, 200);
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+    )");
+
+    mainLayout->addWidget(tableWidget);
+
+    // Pagination controls
+    QHBoxLayout* pageLayout = new QHBoxLayout();
+    pageLayout->setSpacing(10);
+
+    QLabel* pageLabel = new QLabel("第 1 页，共 1 页", m_barClickDialog);
+    pageLabel->setStyleSheet("color: #e0f0ff; font-size: 13px;");
+
+    QPushButton* prevBtn = new QPushButton("上一页", m_barClickDialog);
+    QPushButton* nextBtn = new QPushButton("下一页", m_barClickDialog);
+
+    prevBtn->setEnabled(false);
+    nextBtn->setEnabled(false);
+
+    // Button styling
+    QString btnStyle = R"(
+        QPushButton {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 120, 170, 180),
+                stop:1 rgba(0, 80, 130, 180));
+            color: #ffffff;
+            border: 1px solid rgba(0, 217, 255, 100);
+            border-radius: 6px;
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: bold;
+            min-width: 80px;
+        }
+        QPushButton:hover {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 160, 220, 220),
+                stop:1 rgba(0, 110, 170, 220));
+            border: 1px solid #00d9ff;
+        }
+        QPushButton:pressed {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 80, 110, 180),
+                stop:1 rgba(0, 60, 90, 180));
+            padding-top: 9px;
+            padding-bottom: 7px;
+        }
+        QPushButton:!enabled {
+            background-color: rgba(40, 55, 70, 150);
+            color: #607080;
+            border: 1px solid rgba(0, 217, 255, 40);
+        }
+    )";
+    prevBtn->setStyleSheet(btnStyle);
+    nextBtn->setStyleSheet(btnStyle);
+
+    pageLayout->addStretch();
+    pageLayout->addWidget(prevBtn);
+    pageLayout->addWidget(pageLabel);
+    pageLayout->addWidget(nextBtn);
+    pageLayout->addStretch();
+
+    mainLayout->addLayout(pageLayout);
+
+    // Pagination state
+    int currentPage = 1;
+    int totalPages = 1;
+    const int pageSize = 50;
+
+    // Get the full time key from the data - need to include date
+    QString fullTimeKey = timeKey;
+    QString timeRange = ui.comboTimeRange->currentText();
+    QDate selectedDate = m_selectedDate;
+
+    // Build full timestamp with date
+    if (timeRange == "按小时") {
+        // timeKey is like "05:00", need to add date: "2026-05-05 05:00"
+        fullTimeKey = selectedDate.toString("yyyy-MM-dd") + " " + timeKey;
+    } else if (timeRange == "按天") {
+        // timeKey is like "2026-05-05", use as is
+        fullTimeKey = timeKey;
+    } else if (timeRange == "按月") {
+        // timeKey is like "2026-05", use as is
+        fullTimeKey = timeKey;
+    }
+
+    // Now set the title and window title since we have timeRange
+    // Show time range in title: "2:00" -> "2:00到3:00"
+    QString timeRangeText = timeRange;
+    if (timeRange == "按小时") {
+        // Parse the hour and show next hour
+        bool ok;
+        int hour = timeKey.left(2).toInt(&ok);
+        int nextHour = (hour + 1) % 24;
+        timeRangeText = QString("%1:00到%2:00").arg(hour, 2, 10, QChar('0')).arg(nextHour, 2, 10, QChar('0'));
+    }
+    m_barClickDialog->setWindowTitle(QString("工位%1 %2 缺陷记录").arg(platformIdx + 1).arg(timeRangeText));
+
+    // Lambda to load page data
+    auto loadPageData = [&](int page) {
+        // Create a completely independent database connection to the correct database
+        QString connectionName = QString("barclick_%1_%2")
+            .arg(reinterpret_cast<quintptr>(m_barClickDialog))
+            .arg(QDateTime::currentMSecsSinceEpoch());
+        QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", connectionName);
+
+        // Use the same connection string as worker threads (ivs_lcd database)
+        QString connStr = "DRIVER={MySQL ODBC 5.3 ANSI Driver};"
+                          "SERVER=localhost;"
+                          "PORT=3306;"
+                          "DATABASE=ivs_lcd;"
+                          "UID=root;"
+                          "PWD=123456;"
+                          "OPTION=8;";
+        db.setDatabaseName(connStr);
+
+        if (!db.open()) {
+            qDebug() << "[BarClickDialog] Failed to open database:" << db.lastError().text();
+            QMessageBox::warning(m_barClickDialog, "错误", "数据库连接失败");
+            return;
+        }
+
+        int offset = (page - 1) * pageSize;
+
+        // Build the time filter based on time range
+        // Use full timestamp for accurate filtering (2:00 means 02:00:00 to 02:59:59)
+        QString timeFilter;
+        if (timeRange == "按小时") {
+            // Filter records from fullTimeKey (e.g., "2026-05-05 05:00") to the next hour
+            // We use BETWEEN to get exact time range: 05:00:00 to 05:59:59
+            QString startTime = fullTimeKey;
+            // Calculate end time (next hour)
+            QDateTime start = QDateTime::fromString(startTime, "yyyy-MM-dd hh:mm");
+            QString endTime = start.addSecs(3600).toString("yyyy-MM-dd hh:mm");
+            timeFilter = QString("StartTime >= '%1' AND StartTime < '%2'").arg(startTime).arg(endTime);
+        } else if (timeRange == "按天") {
+            // Filter for entire day
+            timeFilter = QString("StartTime >= '%1 00:00:00' AND StartTime < '%2 00:00:00'")
+                .arg(fullTimeKey)
+                .arg(selectedDate.addDays(1).toString("yyyy-MM-dd"));
+        } else if (timeRange == "按月") {
+            // Filter for entire month
+            QDate date = QDate::fromString(fullTimeKey + "-01", "yyyy-MM-dd");
+            QDate nextMonth = date.addMonths(1);
+            timeFilter = QString("StartTime >= '%1' AND StartTime < '%2'")
+                .arg(fullTimeKey + "-01 00:00:00")
+                .arg(nextMonth.toString("yyyy-MM-dd") + " 00:00:00");
+        } else {
+            timeFilter = fullTimeKey + "%";
+        }
+
+        // Use non-prepared statement to avoid ODBC issues
+        // Only show non-OK records (defects)
+        // Note: The table is ivs_lcd_inspectionresult, PlatformID is 0-based (0,1,2,3)
+        QString sql = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE PlatformID = %1 AND AOIResult != 'OK' AND %2 ORDER BY StartTime DESC LIMIT %3 OFFSET %4")
+            .arg(platformIdx)
+            .arg(timeFilter)
+            .arg(pageSize)
+            .arg(offset);
+
+        QSqlQuery query(db);
+        if (!query.exec(sql)) {
+            qDebug() << "Query error:" << query.lastError().text();
+            QMessageBox::warning(m_barClickDialog, "错误", "查询失败: " + query.lastError().text());
+            db.close();
+            QSqlDatabase::removeDatabase(connectionName);
+            return;
+        }
+
+        tableWidget->setRowCount(0);
+        int row = 0;
+        while (query.next()) {
+            tableWidget->insertRow(row);
+            for (int col = 0; col < 6; ++col) {
+                QTableWidgetItem* item = new QTableWidgetItem(query.value(col).toString());
+                item->setTextAlignment(Qt::AlignCenter);
+                tableWidget->setItem(row, col, item);
+            }
+            ++row;
+        }
+
+        // Update page info
+        pageLabel->setText(QString("第 %1 页，共 %2 页 (共 %3 条记录)").arg(page).arg(totalPages).arg(tableWidget->rowCount()));
+
+        // Update button states
+        prevBtn->setEnabled(page > 1);
+        nextBtn->setEnabled(page < totalPages);
+
+        db.close();
+        QSqlDatabase::removeDatabase(connectionName);
+    };
+
+    // Get total count first - use same time filter logic as loadPageData
+    QString countTimeFilter;
+    if (timeRange == "按小时") {
+        QString startTime = fullTimeKey;
+        QDateTime start = QDateTime::fromString(startTime, "yyyy-MM-dd hh:mm");
+        QString endTime = start.addSecs(3600).toString("yyyy-MM-dd hh:mm");
+        countTimeFilter = QString("StartTime >= '%1' AND StartTime < '%2'").arg(startTime).arg(endTime);
+    } else if (timeRange == "按天") {
+        countTimeFilter = QString("StartTime >= '%1 00:00:00' AND StartTime < '%2 00:00:00'")
+            .arg(fullTimeKey)
+            .arg(selectedDate.addDays(1).toString("yyyy-MM-dd"));
+    } else if (timeRange == "按月") {
+        QDate date = QDate::fromString(fullTimeKey + "-01", "yyyy-MM-dd");
+        QDate nextMonth = date.addMonths(1);
+        countTimeFilter = QString("StartTime >= '%1' AND StartTime < '%2'")
+            .arg(fullTimeKey + "-01 00:00:00")
+            .arg(nextMonth.toString("yyyy-MM-dd") + " 00:00:00");
+    } else {
+        countTimeFilter = fullTimeKey + "%";
+    }
+
+    // Get the connection string from worker threads (ivs_lcd database)
+    QString connStr = "DRIVER={MySQL ODBC 5.3 ANSI Driver};"
+                       "SERVER=localhost;"
+                       "PORT=3306;"
+                       "DATABASE=ivs_lcd;"
+                       "UID=root;"
+                       "PWD=123456;"
+                       "OPTION=8;";
+
+    // Create a completely independent database connection
+    QString countConnectionName = QString("barclick_count_%1_%2")
+        .arg(reinterpret_cast<quintptr>(m_barClickDialog))
+        .arg(QDateTime::currentMSecsSinceEpoch());
+    QSqlDatabase countDb = QSqlDatabase::addDatabase("QODBC", countConnectionName);
+    countDb.setDatabaseName(connStr);
+
+    if (!countDb.open()) {
+        qDebug() << "[BarClickDialog] Failed to open count database:" << countDb.lastError().text();
+        QMessageBox::warning(m_barClickDialog, "错误", "数据库连接失败");
+    } else {
+        // Use non-prepared statement
+        // Only count non-OK records (defects)
+        // Note: The table is ivs_lcd_inspectionresult, PlatformID is 0-based (0,1,2,3)
+        QString sql = QString("SELECT COUNT(*) FROM ivs_lcd_inspectionresult WHERE PlatformID = %1 AND AOIResult != 'OK' AND %2")
+            .arg(platformIdx).arg(countTimeFilter);
+        qDebug() << "[BarClickDialog] Count SQL:" << sql;
+        QSqlQuery countQuery(countDb);
+        countQuery.exec(sql);
+
+        if (countQuery.next()) {
+            int totalCount = countQuery.value(0).toInt();
+            totalPages = (totalCount + pageSize - 1) / pageSize;
+            if (totalPages < 1) totalPages = 1;
+            pageLabel->setText(QString("第 1 页，共 %1 页 (共 %2 条记录)").arg(totalPages).arg(totalCount));
+            nextBtn->setEnabled(totalPages > 1);
+            qDebug() << "[BarClickDialog] Total count:" << totalCount;
+        }
+        countDb.close();
+        QSqlDatabase::removeDatabase(countConnectionName);
+    }
+
+    // Load first page
+    loadPageData(1);
+
+    // Connect pagination buttons
+    QObject::connect(prevBtn, &QPushButton::clicked, this, [&]() {
+        if (currentPage > 1) {
+            --currentPage;
+            loadPageData(currentPage);
+        }
+    });
+
+    QObject::connect(nextBtn, &QPushButton::clicked, this, [&]() {
+        if (currentPage < totalPages) {
+            ++currentPage;
+            loadPageData(currentPage);
+        }
+    });
+
+    // Dialog button box
+    QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok, m_barClickDialog);
+    buttonBox->button(QDialogButtonBox::Ok)->setText("关闭");
+    buttonBox->button(QDialogButtonBox::Ok)->setStyleSheet(R"(
+        QPushButton {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 150, 200, 180),
+                stop:1 rgba(0, 100, 160, 180));
+            color: #ffffff;
+            border: 1px solid rgba(0, 217, 255, 100);
+            border-radius: 6px;
+            padding: 8px 30px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 190, 250, 220),
+                stop:1 rgba(0, 130, 200, 220));
+            border: 1px solid #00d9ff;
+        }
+    )");
+    mainLayout->addWidget(buttonBox);
+
+    QObject::connect(buttonBox, &QDialogButtonBox::accepted, m_barClickDialog, &QDialog::accept);
+
+    // Set dialog background
+    m_barClickDialog->setStyleSheet("QDialog { background-color: rgba(15, 25, 45, 230); }");
+
+    // Show dialog
+    m_barClickDialog->exec();
 }
 

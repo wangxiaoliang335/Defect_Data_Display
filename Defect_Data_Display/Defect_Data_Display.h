@@ -22,6 +22,10 @@
 #include <QMutex>
 #include <QChartView>
 #include <QTableWidget>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QtCharts/QStackedBarSeries>
 #include <QtCharts/QBarSeries>
 #include <QtCharts/QBarSet>
@@ -168,6 +172,10 @@ private:
     QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count
     CachedTabData m_locationAbnormalCache;
     QLabel* m_tooltipLabel;  // custom floating tooltip for platform charts
+    QDialog* m_barClickDialog;  // dialog for bar click details
+
+private slots:
+    void showBarClickDialog(int platformIdx, const QString& timeKey);
 };
 
 class DataLoaderThread : public QThread
