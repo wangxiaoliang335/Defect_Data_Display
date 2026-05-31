@@ -1101,7 +1101,13 @@ void Defect_Data_Display::onDataLoaded_PlatformTrend(const QMap<QString, QMap<in
     m_platformTrendData = platformTrendData;
     m_currentTimeFormat = timeRange;
 
-    updatePlatformTrendChart(platformTrendData);
+    // Only draw chart here if we don't have AOIResult data
+    // Otherwise, wait for onDataLoaded_PlatformAoiResult to draw the stacked chart
+    if (m_platformAoiResultData.isEmpty()) {
+        updatePlatformTrendChart(platformTrendData);
+    } else {
+        qDebug() << "Waiting for AOIResult data to draw stacked chart...";
+    }
 }
 
 void Defect_Data_Display::onDataLoaded_DefectTrend(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange)
@@ -2044,8 +2050,14 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
 
         for (QBarSet* bs : barSets) stackedSeries->append(bs);
         chart->addSeries(stackedSeries);
-        chart->setTitle(platformNames[p] + " (" + timeRange + ") - Total");
-        chart->legend()->hide();
+        chart->setTitle(platformNames[p] + " (" + timeRange + ")");
+        chart->legend()->show();
+        chart->legend()->setLabelColor(QColor(234, 234, 234));
+        chart->legend()->setBrush(QBrush(QColor(22, 33, 62, 200)));
+        chart->legend()->setPen(QPen(QColor(60, 80, 100)));
+        QFont legendFont = chart->legend()->font();
+        legendFont.setPointSize(9);
+        chart->legend()->setFont(legendFont);
 
         QBarCategoryAxis* axisX = new QBarCategoryAxis();
         axisX->append(timeCategories);
@@ -2072,24 +2084,50 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
         stackedSeries->attachAxis(axisX);
         stackedSeries->attachAxis(axisY);
 
-        // Add total value text above each bar
+        // Hide segment labels - we'll show total only above each bar
+        stackedSeries->setLabelsVisible(false);
+        
+        // Wait for layout to complete, then add total labels
         if (!chart->scene()) continue;
-        for (int ti = 0; ti < timeCategories.size(); ++ti) {
-            if (columnTotals[ti] <= 0) continue;
-            int chartWidth = chartView->viewport()->width();
-            if (chartWidth <= 0) chartWidth = 400;
-            int categoryWidth = chartWidth / qMax(timeCategories.size(), 1);
-            qreal barCenterX = (ti + 0.5) * categoryWidth;
-            qreal barTopY = columnTotals[ti];
-
-            QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(QString::number(columnTotals[ti]));
-            textItem->setFont(QFont("Arial", 9, QFont::Bold));
-            textItem->setBrush(QBrush(QColor(255, 255, 255)));
-            textItem->setZValue(100);
-            chart->scene()->addItem(textItem);
-            QPointF scenePoint = chart->mapToPosition(QPointF(barCenterX, barTopY));
-            textItem->setPos(scenePoint.x() - textItem->boundingRect().width() / 2, scenePoint.y() - 18);
-        }
+        
+        // Use QTimer to defer label positioning until after layout is complete
+        QTimer::singleShot(50, this, [chart, chartView, timeCategories, columnTotals, axisY]() {
+            QRectF plotArea = chart->plotArea();
+            int numBars = timeCategories.size();
+            if (numBars == 0) return;
+            
+            // Calculate bar positions based on plot area
+            qreal barGroupWidth = plotArea.width() / numBars;
+            qreal barWidth = barGroupWidth * 0.7;  // 70% of group width for the bar
+            qreal barLeftMargin = barGroupWidth * 0.15; // 15% margin on each side
+            
+            qreal yMin = axisY->min();
+            qreal yMax = axisY->max();
+            qreal yRange = yMax - yMin;
+            
+            for (int ti = 0; ti < numBars; ++ti) {
+                if (columnTotals[ti] <= 0) continue;
+                
+                // Calculate bar position
+                qreal barCenterX = plotArea.left() + barLeftMargin + ti * barGroupWidth + barWidth / 2;
+                
+                // Calculate Y position for the top of the bar (value relative to axis)
+                qreal normalizedValue = (columnTotals[ti] - yMin) / yRange;
+                qreal barTopY = plotArea.bottom() - normalizedValue * plotArea.height();
+                
+                // Create text item
+                QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(QString::number(columnTotals[ti]));
+                textItem->setFont(QFont("Arial", 9, QFont::Bold));
+                textItem->setBrush(QBrush(QColor(255, 255, 255)));
+                textItem->setZValue(100);
+                chart->scene()->addItem(textItem);
+                
+                // Position text centered above the bar
+                qreal textX = barCenterX - textItem->boundingRect().width() / 2;
+                qreal textY = barTopY - textItem->boundingRect().height() - 3;
+                textItem->setPos(textX, textY);
+            }
+        });
     }
 }
 
