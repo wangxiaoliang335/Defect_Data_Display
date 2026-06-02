@@ -405,36 +405,260 @@ void Defect_Data_Display::showDetailPieDialog()
     QDialog dialog(this);
     dialog.setWindowTitle(m_detailPieTitle.isEmpty() ? "缺陷类型分布" : m_detailPieTitle);
     dialog.setModal(true);
-    dialog.resize(520, 320);
+    dialog.resize(900, 600);
+    dialog.setStyleSheet(R"(
+        QDialog {
+            background-color: #1a1a2e;
+        }
+        QLabel#titleLabel {
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: bold;
+            padding: 8px 0;
+        }
+        QLabel#subtitleLabel {
+            color: #8892b0;
+            font-size: 12px;
+            padding-bottom: 10px;
+        }
+        QTableWidget {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 5px;
+            gridline-color: #0f3460;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+        QTableWidget::item {
+            padding: 8px 12px;
+            border-bottom: 1px solid #0f3460;
+        }
+        QTableWidget::item:selected {
+            background-color: #0f3460;
+            color: #00d9ff;
+        }
+        QHeaderView::section {
+            background-color: #0f3460;
+            color: #00d9ff;
+            font-weight: bold;
+            font-size: 13px;
+            padding: 10px;
+            border: none;
+            border-bottom: 2px solid #00d9ff;
+        }
+        QPushButton {
+            background-color: #0f3460;
+            color: #00d9ff;
+            border: 1px solid #00d9ff;
+            border-radius: 6px;
+            padding: 10px 30px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: #00d9ff;
+            color: #16213e;
+        }
+        QFrame#chartFrame {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 5px;
+        }
+        QFrame#statCard {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 10px;
+        }
+    )");
 
     QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
-    QLabel* summaryLabel = new QLabel(QString("总数：%1").arg(total), &dialog);
-    summaryLabel->setStyleSheet("color:#00d9ff; font-size:14px; font-weight:bold;");
-    mainLayout->addWidget(summaryLabel);
+    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setSpacing(15);
+
+    // Title section
+    QLabel* titleLabel = new QLabel(m_detailPieTitle.isEmpty() ? "缺陷类型分布" : m_detailPieTitle, &dialog);
+    titleLabel->setObjectName("titleLabel");
+    titleLabel->setAlignment(Qt::AlignCenter);
+    mainLayout->addWidget(titleLabel);
+
+    QLabel* subtitleLabel = new QLabel("点击下方表格查看详细分布信息", &dialog);
+    subtitleLabel->setObjectName("subtitleLabel");
+    subtitleLabel->setAlignment(Qt::AlignCenter);
+    mainLayout->addWidget(subtitleLabel);
+
+    // Content layout: mini pie chart + stats on left, table on right
+    QHBoxLayout* contentLayout = new QHBoxLayout();
+    contentLayout->setSpacing(15);
+
+    // Left side: mini pie chart + stats
+    QVBoxLayout* leftLayout = new QVBoxLayout();
+    leftLayout->setSpacing(10);
+
+    // Mini pie chart frame
+    QFrame* chartFrame = new QFrame(&dialog);
+    chartFrame->setObjectName("chartFrame");
+    chartFrame->setFixedHeight(180);
+    QVBoxLayout* chartLayout = new QVBoxLayout(chartFrame);
+    chartLayout->setContentsMargins(5, 5, 5, 5);
+
+    QLabel* chartTitle = new QLabel("分布图", chartFrame);
+    chartTitle->setStyleSheet("color: #00d9ff; font-size: 12px; font-weight: bold;");
+    chartTitle->setAlignment(Qt::AlignCenter);
+    chartLayout->addWidget(chartTitle);
+
+    // Create mini pie chart
+    QPieSeries* miniSeries = new QPieSeries();
+    QList<QString> colors = {"#00d9ff", "#ff6b6b", "#4ecdc4", "#ffe66d", "#a855f7", "#f97316", "#84cc16", "#ec4899"};
+    int colorIdx = 0;
+    for (auto it = m_detailPieData.constBegin(); it != m_detailPieData.constEnd(); ++it) {
+        QPieSlice* slice = miniSeries->append(it.key(), it.value());
+        slice->setColor(QColor(colors[colorIdx % colors.size()]));
+        slice->setLabelVisible(false);
+        colorIdx++;
+    }
+    miniSeries->setHoleSize(0.35);
+
+    QChart* miniChart = new QChart();
+    miniChart->addSeries(miniSeries);
+    miniChart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    miniChart->setAnimationOptions(QChart::NoAnimation);
+    miniChart->legend()->setVisible(false);
+
+    QChartView* miniChartView = new QChartView(miniChart);
+    miniChartView->setRenderHint(QPainter::Antialiasing);
+    miniChartView->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    miniChartView->setFixedHeight(140);
+    chartLayout->addWidget(miniChartView);
+
+    leftLayout->addWidget(chartFrame);
+
+    // Stats cards
+    QHBoxLayout* statsLayout = new QHBoxLayout();
+    statsLayout->setSpacing(10);
+
+    // Total stat card
+    QFrame* totalCard = new QFrame(&dialog);
+    totalCard->setObjectName("statCard");
+    QVBoxLayout* totalCardLayout = new QVBoxLayout(totalCard);
+    totalCardLayout->setContentsMargins(8, 8, 8, 8);
+    QLabel* totalTitle = new QLabel("总数", totalCard);
+    totalTitle->setStyleSheet("color: #8892b0; font-size: 11px;");
+    totalTitle->setAlignment(Qt::AlignCenter);
+    QLabel* totalValue = new QLabel(QString::number(total), totalCard);
+    totalValue->setStyleSheet("color: #00d9ff; font-size: 22px; font-weight: bold;");
+    totalValue->setAlignment(Qt::AlignCenter);
+    totalCardLayout->addWidget(totalTitle);
+    totalCardLayout->addWidget(totalValue);
+    statsLayout->addWidget(totalCard);
+
+    // Type count stat card
+    QFrame* typeCard = new QFrame(&dialog);
+    typeCard->setObjectName("statCard");
+    QVBoxLayout* typeCardLayout = new QVBoxLayout(typeCard);
+    typeCardLayout->setContentsMargins(8, 8, 8, 8);
+    QLabel* typeTitle = new QLabel("类型数", typeCard);
+    typeTitle->setStyleSheet("color: #8892b0; font-size: 11px;");
+    typeTitle->setAlignment(Qt::AlignCenter);
+    QLabel* typeValue = new QLabel(QString::number(m_detailPieData.size()), typeCard);
+    typeValue->setStyleSheet("color: #ff6b6b; font-size: 22px; font-weight: bold;");
+    typeValue->setAlignment(Qt::AlignCenter);
+    typeCardLayout->addWidget(typeTitle);
+    typeCardLayout->addWidget(typeValue);
+    statsLayout->addWidget(typeCard);
+
+    leftLayout->addLayout(statsLayout);
+    leftLayout->addStretch(1);
+    contentLayout->addLayout(leftLayout, 1);
+
+    // Right side: data table
+    QVBoxLayout* rightLayout = new QVBoxLayout();
+
+    QLabel* tableTitle = new QLabel("详细数据", &dialog);
+    tableTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
+    rightLayout->addWidget(tableTitle);
 
     QTableWidget* table = new QTableWidget(&dialog);
     table->setColumnCount(4);
-    table->setHorizontalHeaderLabels({"名称", "数量", "比例", "百分比"});
+    table->setHorizontalHeaderLabels({"缺陷类型", "数量", "比例", "占比"});
     table->setRowCount(m_detailPieData.size());
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setAlternatingRowColors(false);
     table->horizontalHeader()->setStretchLastSection(true);
+    table->verticalHeader()->setVisible(false);
+    table->setShowGrid(false);
+    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    table->verticalHeader()->setDefaultSectionSize(36);
+    table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
+    // Set uniform background for all rows
+    const int rowCount = m_detailPieData.size();
+    for (int r = 0; r < rowCount; ++r) {
+        for (int c = 0; c < 4; ++c) {
+            QTableWidgetItem* item = table->item(r, c);
+            if (item) {
+                item->setBackground(QBrush(QColor("#16213e")));
+            }
+        }
+    }
+
+    // Set row colors for the mini pie chart legend
+    colorIdx = 0;
     int row = 0;
     for (auto it = m_detailPieData.constBegin(); it != m_detailPieData.constEnd(); ++it, ++row) {
         const int count = it.value();
         const double ratio = total > 0 ? static_cast<double>(count) / static_cast<double>(total) : 0.0;
-        table->setItem(row, 0, new QTableWidgetItem(it.key()));
-        table->setItem(row, 1, new QTableWidgetItem(QString::number(count)));
-        table->setItem(row, 2, new QTableWidgetItem(QString::number(ratio, 'f', 4)));
-        table->setItem(row, 3, new QTableWidgetItem(QString::number(ratio * 100.0, 'f', 2) + "%"));
-    }
-    mainLayout->addWidget(table);
+        const QString colorHex = colors[colorIdx % colors.size()];
 
-    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    mainLayout->addWidget(buttons);
+        // Type name with color indicator
+        QTableWidgetItem* nameItem = new QTableWidgetItem("● " + it.key());
+        nameItem->setForeground(QBrush(QColor(colorHex)));
+        nameItem->setFont(QFont("Microsoft YaHei", 12, QFont::Bold));
+        table->setItem(row, 0, nameItem);
+
+        QTableWidgetItem* countItem = new QTableWidgetItem(QString::number(count));
+        countItem->setFont(QFont("Microsoft YaHei", 12));
+        countItem->setForeground(QBrush(QColor("#e0e0e0")));
+        countItem->setTextAlignment(Qt::AlignCenter);
+        table->setItem(row, 1, countItem);
+
+        QTableWidgetItem* ratioItem = new QTableWidgetItem(QString::number(ratio, 'f', 4));
+        ratioItem->setFont(QFont("Microsoft YaHei", 12));
+        ratioItem->setForeground(QBrush(QColor("#e0e0e0")));
+        ratioItem->setTextAlignment(Qt::AlignCenter);
+        table->setItem(row, 2, ratioItem);
+
+        QTableWidgetItem* percentItem = new QTableWidgetItem(QString::number(ratio * 100.0, 'f', 1) + "%");
+        percentItem->setFont(QFont("Microsoft YaHei", 12, QFont::Bold));
+        percentItem->setForeground(QBrush(QColor(colorHex)));
+        percentItem->setTextAlignment(Qt::AlignCenter);
+        table->setItem(row, 3, percentItem);
+
+        colorIdx++;
+    }
+
+    table->setColumnWidth(0, 140);
+    table->setColumnWidth(1, 80);
+    table->setColumnWidth(2, 80);
+    rightLayout->addWidget(table);
+    contentLayout->addLayout(rightLayout, 2);
+
+    mainLayout->addLayout(contentLayout);
+
+    // Bottom button
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
+    QPushButton* okBtn = new QPushButton("确 定", &dialog);
+    okBtn->setFixedWidth(120);
+    connect(okBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
+    buttonLayout->addWidget(okBtn);
+    buttonLayout->addStretch();
+    mainLayout->addLayout(buttonLayout);
 
     dialog.exec();
 }
@@ -658,16 +882,17 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
             border: none;
         }
     )");
+    ui.searchResultTable->setColumnCount(8);
     ui.searchResultTable->setAlternatingRowColors(true);
     ui.searchResultTable->verticalHeader()->setVisible(false);
     ui.searchResultTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     ui.searchResultTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui.searchResultTable->horizontalHeader()->setStretchLastSection(true);
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < 8; ++i)
         ui.searchResultTable->horizontalHeader()->setSectionResizeMode(i, QHeaderView::ResizeToContents);
 
     // Set column headers
-    QStringList headers = {"Code_AOI", "Grade_AOI", "Defect_Type", "Station", "Inspect_Time", "Result"};
+    QStringList headers = {"Code_AOI", "Grade_AOI", "Defect_Type", "PlatformID", "Inspect_Time", "Result", "MarkID", "StopTime"};
     for (int i = 0; i < headers.size() && i < ui.searchResultTable->columnCount(); ++i)
         ui.searchResultTable->setHorizontalHeaderItem(i, new QTableWidgetItem(headers[i]));
 
@@ -685,10 +910,12 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
             COUNT(*) as cnt,
             ir.PlatformID,
             ir.StartTime,
-            ir.AOIResult
+            ir.AOIResult,
+            ir.MarkID,
+            ir.StopTime
         FROM ivs_lcd_inspectionresult ir
         WHERE ir.ScreenID = '%1'
-        GROUP BY ir.Code_AOI, ir.Grade_AOI, ir.PlatformID, ir.AOIResult, DATE(ir.StartTime), HOUR(ir.StartTime)
+        GROUP BY ir.Code_AOI, ir.Grade_AOI, ir.PlatformID, ir.AOIResult, ir.MarkID, ir.StopTime, DATE(ir.StartTime), HOUR(ir.StartTime)
         ORDER BY ir.StartTime DESC
         LIMIT 500
     )").arg(screenId);
@@ -718,11 +945,13 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
         int platformId = query.value(3).toInt();
         QDateTime startTime = query.value(4).toDateTime();
         QString aoiResult = query.value(5).toString();
+        int markId = query.value(6).toInt();
+        QDateTime stopTime = query.value(7).toDateTime();
 
         ui.searchResultTable->setItem(row, 0, new QTableWidgetItem(codeAoi));
         ui.searchResultTable->setItem(row, 1, new QTableWidgetItem(gradeAoi));
         ui.searchResultTable->setItem(row, 2, new QTableWidgetItem(QString::number(cnt)));
-        ui.searchResultTable->setItem(row, 3, new QTableWidgetItem(QString("P%1").arg(platformId)));
+        ui.searchResultTable->setItem(row, 3, new QTableWidgetItem(QString::number(platformId + 1)));
 
         QTableWidgetItem* timeItem = new QTableWidgetItem(startTime.toString("yyyy-MM-dd HH:mm:ss"));
         timeItem->setForeground(QBrush(QColor(100, 180, 220)));
@@ -736,6 +965,13 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
             resultItem->setForeground(QBrush(QColor(128, 100, 100)));
         }
         ui.searchResultTable->setItem(row, 5, resultItem);
+
+        ui.searchResultTable->setItem(row, 6, new QTableWidgetItem(markId > 0 ? QString::number(markId) : ""));
+
+        QTableWidgetItem* stopTimeItem = new QTableWidgetItem(stopTime.isValid() ? stopTime.toString("yyyy-MM-dd HH:mm:ss") : "");
+        stopTimeItem->setForeground(QBrush(QColor(255, 180, 100)));
+        stopTimeItem->setFont(QFont(ui.searchResultTable->font().family(), 12));
+        ui.searchResultTable->setItem(row, 7, stopTimeItem);
 
         ++row;
     }
