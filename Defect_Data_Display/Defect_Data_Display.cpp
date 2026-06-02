@@ -10,6 +10,10 @@
 #include <QtCharts/QPieSeries>
 #include <QtCharts/QPieSlice>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QGridLayout>
+#include <QLabel>
+#include <QDialogButtonBox>
 #include <QPainter>
 #include <QTimer>
 #include <QMouseEvent>
@@ -20,6 +24,10 @@
 #include <QHeaderView>
 #include <QToolTip>
 #include <QGraphicsSimpleTextItem>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QFile>
+#include <QTextStream>
 #include <algorithm>
 
 Defect_Data_Display::Defect_Data_Display(QWidget *parent)
@@ -42,12 +50,16 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_tabWorkerThread(nullptr)
     , m_currentLoadId(0)
     , m_selectedDate(QDate::currentDate())
+    , m_searchStartHour(0)    // 默认 00:00
+    , m_searchEndHour(23)     // 默认 23:59
     , m_isDragging(false)
     , m_isLoading(false)
     , m_isTabLoading(false)
     , m_lastMainLoadTime(0)
     , m_tooltipLabel(nullptr)
     , m_barClickDialog(nullptr)
+    , m_detailPieTitle()
+    , m_detailPieData()
 {
     setWindowFlags(Qt::FramelessWindowHint);
     setAttribute(Qt::WA_TranslucentBackground);
@@ -56,6 +68,13 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
 
     ui.dateEdit->setDate(m_selectedDate);
     ui.dateEdit->setDisplayFormat("yyyy-MM-dd");
+    // Set default selection for hourly time range (default: 0-23)
+    ui.timeEditStart->setCurrentIndex(0);   // 00:00
+    ui.timeEditEnd->setCurrentIndex(23);     // 23:00
+    ui.timeEditStart->setEnabled(false);
+    ui.timeEditEnd->setEnabled(false);
+    ui.labelStartTime->setEnabled(false);
+    ui.labelEndTime->setEnabled(false);
 
     setupCharts();
 
@@ -72,6 +91,14 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     connect(ui.comboTimeRange, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &Defect_Data_Display::onTimeRangeChanged);
     connect(ui.dateEdit, &QDateEdit::dateChanged, this, &Defect_Data_Display::onDateChanged);
+    connect(ui.comboTimeRange, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &Defect_Data_Display::onTimeRangeChangedForSearch);
+    connect(ui.timeEditStart, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        m_searchStartHour = ui.timeEditStart->currentIndex();
+    });
+    connect(ui.timeEditEnd, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        m_searchEndHour = ui.timeEditEnd->currentIndex();
+    });
     connect(ui.btnMinimize, &QPushButton::clicked, this, &Defect_Data_Display::onMinimizeClicked);
     connect(ui.btnClose, &QPushButton::clicked, this, &Defect_Data_Display::onCloseClicked);
     connect(ui.tabWidget, &QTabWidget::currentChanged, this, &Defect_Data_Display::onTabChanged);
@@ -101,6 +128,74 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
             border: 1px solid rgba(0, 217, 255, 40);
         }
     )");
+
+    // Time filter combo box styling
+    ui.timeEditStart->setStyleSheet(R"(
+        QComboBox {
+            background-color: rgba(30, 40, 60, 200);
+            border: 1px solid rgba(0, 217, 255, 80);
+            border-radius: 4px;
+            padding: 2px 5px;
+            color: #e0f0ff;
+        }
+        QComboBox:disabled {
+            background-color: rgba(20, 30, 45, 150);
+            color: #607080;
+            border: 1px solid rgba(0, 217, 255, 40);
+        }
+        QComboBox::drop-down {
+            border: none;
+            width: 20px;
+        }
+        QComboBox::down-arrow {
+            image: none;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 6px solid #00d9ff;
+        }
+        QComboBox QAbstractItemView {
+            background-color: rgba(20, 35, 55, 240);
+            border: 1px solid rgba(0, 217, 255, 80);
+            color: #e0f0ff;
+            selection-background-color: rgba(0, 150, 200, 180);
+        }
+    )");
+    ui.timeEditEnd->setStyleSheet(R"(
+        QComboBox {
+            background-color: rgba(30, 40, 60, 200);
+            border: 1px solid rgba(0, 217, 255, 80);
+            border-radius: 4px;
+            padding: 2px 5px;
+            color: #e0f0ff;
+        }
+        QComboBox:disabled {
+            background-color: rgba(20, 30, 45, 150);
+            color: #607080;
+            border: 1px solid rgba(0, 217, 255, 40);
+        }
+        QComboBox::drop-down {
+            border: none;
+            width: 20px;
+        }
+        QComboBox::down-arrow {
+            image: none;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 6px solid #00d9ff;
+        }
+        QComboBox QAbstractItemView {
+            background-color: rgba(20, 35, 55, 240);
+            border: 1px solid rgba(0, 217, 255, 80);
+            color: #e0f0ff;
+            selection-background-color: rgba(0, 150, 200, 180);
+        }
+    )");
+
+    // Initially disable time edits (only enabled for "按小时" mode)
+    ui.timeEditStart->setEnabled(false);
+    ui.timeEditEnd->setEnabled(false);
+    ui.labelStartTime->setEnabled(false);
+    ui.labelEndTime->setEnabled(false);
 
     ui.btnSearch->setStyleSheet(R"(
         QPushButton {
@@ -281,12 +376,67 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
                             }
                         }
                     }
-                    break;
+                    return QMainWindow::eventFilter(watched, event);
                 }
+            }
+
+            QChartView* pieView = static_cast<QChartView*>(m_chartViewPieDetail);
+            if (pieView && (pieView == watched || pieView->viewport() == watched)) {
+                showDetailPieDialog();
+                return true;
             }
         }
     }
     return QMainWindow::eventFilter(watched, event);
+}
+
+void Defect_Data_Display::showDetailPieDialog()
+{
+    if (m_detailPieData.isEmpty()) {
+        QMessageBox::information(this, "提示", "当前没有可显示的饼图数据。");
+        return;
+    }
+
+    int total = 0;
+    for (auto it = m_detailPieData.constBegin(); it != m_detailPieData.constEnd(); ++it) {
+        total += it.value();
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(m_detailPieTitle.isEmpty() ? "缺陷类型分布" : m_detailPieTitle);
+    dialog.setModal(true);
+    dialog.resize(520, 320);
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
+    QLabel* summaryLabel = new QLabel(QString("总数：%1").arg(total), &dialog);
+    summaryLabel->setStyleSheet("color:#00d9ff; font-size:14px; font-weight:bold;");
+    mainLayout->addWidget(summaryLabel);
+
+    QTableWidget* table = new QTableWidget(&dialog);
+    table->setColumnCount(4);
+    table->setHorizontalHeaderLabels({"名称", "数量", "比例", "百分比"});
+    table->setRowCount(m_detailPieData.size());
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->horizontalHeader()->setStretchLastSection(true);
+
+    int row = 0;
+    for (auto it = m_detailPieData.constBegin(); it != m_detailPieData.constEnd(); ++it, ++row) {
+        const int count = it.value();
+        const double ratio = total > 0 ? static_cast<double>(count) / static_cast<double>(total) : 0.0;
+        table->setItem(row, 0, new QTableWidgetItem(it.key()));
+        table->setItem(row, 1, new QTableWidgetItem(QString::number(count)));
+        table->setItem(row, 2, new QTableWidgetItem(QString::number(ratio, 'f', 4)));
+        table->setItem(row, 3, new QTableWidgetItem(QString::number(ratio * 100.0, 'f', 2) + "%"));
+    }
+    mainLayout->addWidget(table);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    mainLayout->addWidget(buttons);
+
+    dialog.exec();
 }
 
 void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int platformIdx, const QPoint& viewportPos, const QPointF& chartPos)
@@ -1117,6 +1267,8 @@ void Defect_Data_Display::onRefreshClicked()
     ui.btnRefresh->setEnabled(false);
     ui.comboTimeRange->setEnabled(false);
     ui.dateEdit->setEnabled(false);
+    ui.timeEditStart->setEnabled(false);
+    ui.timeEditEnd->setEnabled(false);
 
     // Cancel any existing loading
     if (m_workerThread) {
@@ -1145,7 +1297,10 @@ void Defect_Data_Display::onRefreshClicked()
     int thisLoadId = m_currentLoadId;
 
     qDebug() << "Creating new worker thread with loadId:" << thisLoadId;
-    m_workerThread = new DataLoaderThread(thisLoadId, timeRange, getDateTimeRange(timeRange), m_searchScreenId, this);
+    // Pass time range filter for hourly mode
+    int startHour = (timeRange == "按小时") ? ui.timeEditStart->currentIndex() : -1;
+    int endHour = (timeRange == "按小时") ? ui.timeEditEnd->currentIndex() : -1;
+    m_workerThread = new DataLoaderThread(thisLoadId, timeRange, getDateTimeRange(timeRange), m_searchScreenId, this, startHour, endHour);
 
     connect(m_workerThread, &DataLoaderThread::aoiDataLoaded,
             this, &Defect_Data_Display::onDataLoaded_Aoi, Qt::QueuedConnection);
@@ -1242,6 +1397,16 @@ void Defect_Data_Display::onTimeRangeChanged(int index)
     onRefreshClicked();
 }
 
+void Defect_Data_Display::onTimeRangeChangedForSearch(int index)
+{
+    // Only enable time filters for "按小时" mode (index 0)
+    bool enableTimeFilter = (index == 0);
+    ui.timeEditStart->setEnabled(enableTimeFilter);
+    ui.timeEditEnd->setEnabled(enableTimeFilter);
+    ui.labelStartTime->setEnabled(enableTimeFilter);
+    ui.labelEndTime->setEnabled(enableTimeFilter);
+}
+
 void Defect_Data_Display::onLoadFinished(int loadId)
 {
     qDebug() << "=== onLoadFinished called ===" << "loadId:" << loadId << "currentLoadId:" << m_currentLoadId;
@@ -1252,6 +1417,13 @@ void Defect_Data_Display::onLoadFinished(int loadId)
     ui.btnRefresh->setEnabled(true);
     ui.comboTimeRange->setEnabled(true);
     ui.dateEdit->setEnabled(true);
+    // Re-enable time edits only if in hourly mode
+    QString timeRange = ui.comboTimeRange->currentText();
+    bool enableTimeFilter = (timeRange == "按小时");
+    ui.timeEditStart->setEnabled(enableTimeFilter);
+    ui.timeEditEnd->setEnabled(enableTimeFilter);
+    ui.labelStartTime->setEnabled(enableTimeFilter);
+    ui.labelEndTime->setEnabled(enableTimeFilter);
     ui.labelStatus->setText("Updated " + QDateTime::currentDateTime().toString("HH:mm:ss"));
     ui.labelStatus->setStyleSheet("color: #00ff88;");
 }
@@ -1852,6 +2024,9 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
         defectCountByType[codeAoi] = defectCountByType.value(codeAoi, 0) + cnt;
     }
 
+    m_detailPieData = defectCountByType;
+    m_detailPieTitle = QString("缺陷类型分布");
+
     qDebug() << "Step 2: Defect types count =" << defectCountByType.size();
 
     if (defectCountByType.isEmpty()) {
@@ -1913,6 +2088,9 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     QChartView* newPieChartView = new QChartView(pieChart);
     newPieChartView->setRenderHint(QPainter::Antialiasing);
     newPieChartView->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    newPieChartView->setCursor(Qt::PointingHandCursor);
+    newPieChartView->installEventFilter(this);
+    newPieChartView->viewport()->installEventFilter(this);
 
     qDebug() << "Step 6: Adding pie chart to layout";
 
@@ -2621,12 +2799,15 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
 }
 
 DataLoaderThread::DataLoaderThread(int loadId, const QString& timeRange, const QString& dateRange,
-                                   const QString& searchScreenId, QObject* parent)
+                                   const QString& searchScreenId, QObject* parent,
+                                   int startHour, int endHour)
     : QThread(parent)
     , m_loadId(loadId)
     , m_timeRange(timeRange)
     , m_dateRange(dateRange)
     , m_searchScreenId(searchScreenId)
+    , m_startHour(startHour)
+    , m_endHour(endHour)
 {
 }
 
@@ -2662,6 +2843,24 @@ void DataLoaderThread::run()
     //    queryCondition += QString(" AND ScreenID = '%1'").arg(m_searchScreenId);
     //    qDebug() << "ScreenID filter:" << m_searchScreenId;
     //}
+
+    // Add hourly time range filter if specified
+    if (m_timeRange == "按小时" && m_startHour >= 0 && m_endHour >= 0) {
+        // Add time-of-day filter: HOUR(StartTime) between start and end
+        int startHour = m_startHour;
+        int endHour = m_endHour;
+        
+        if (startHour <= endHour) {
+            // Normal range: e.g., 8:00 to 17:00
+            queryCondition += QString(" AND HOUR(StartTime) >= %1 AND HOUR(StartTime) <= %2")
+                              .arg(startHour).arg(endHour);
+        } else {
+            // Overnight range: e.g., 22:00 to 06:00 (crosses midnight)
+            queryCondition += QString(" AND (HOUR(StartTime) >= %1 OR HOUR(StartTime) <= %2)")
+                              .arg(startHour).arg(endHour);
+        }
+        qDebug() << "[Chart] Hourly time filter: startHour=" << startHour << "endHour=" << endHour;
+    }
 
     // Get time format based on time range
     QString timeFormat;
@@ -3921,9 +4120,34 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
     });
 
     // Dialog button box
-    QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok, m_barClickDialog);
-    buttonBox->button(QDialogButtonBox::Ok)->setText("关闭");
-    buttonBox->button(QDialogButtonBox::Ok)->setStyleSheet(R"(
+    QDialogButtonBox* buttonBox = new QDialogButtonBox(m_barClickDialog);
+    
+    // Add Export button
+    QPushButton* exportBtn = new QPushButton("导出到CSV", m_barClickDialog);
+    exportBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 150, 100, 180),
+                stop:1 rgba(0, 100, 60, 180));
+            color: #ffffff;
+            border: 1px solid rgba(0, 217, 150, 100);
+            border-radius: 6px;
+            padding: 8px 30px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        QPushButton:hover {
+            background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 190, 140, 220),
+                stop:1 rgba(0, 130, 90, 220));
+            border: 1px solid #00ffa0;
+        }
+    )");
+    buttonBox->addButton(exportBtn, QDialogButtonBox::ActionRole);
+    
+    // Add Close button
+    QPushButton* closeBtn = buttonBox->addButton("关闭", QDialogButtonBox::AcceptRole);
+    closeBtn->setStyleSheet(R"(
         QPushButton {
             background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                 stop:0 rgba(0, 150, 200, 180),
@@ -3945,6 +4169,58 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
     mainLayout->addWidget(buttonBox);
 
     QObject::connect(buttonBox, &QDialogButtonBox::accepted, m_barClickDialog, &QDialog::accept);
+
+    // Connect export button - directly export data from tableWidget (no DB needed)
+    QObject::connect(exportBtn, &QPushButton::clicked, this, [=]() {
+        QString safeTimeKey = timeKey;
+        safeTimeKey.replace(":", "-");
+
+        QString fileName = QFileDialog::getSaveFileName(m_barClickDialog,
+                                                        "导出数据",
+                                                        QString("工位%1_%2_缺陷记录.csv").arg(platformIdx + 1).arg(safeTimeKey),
+                                                        "CSV文件 (*.csv)");
+        if (fileName.isEmpty())
+            return;
+
+        QFile file(fileName);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QMessageBox::critical(m_barClickDialog, "导出失败", "无法创建文件: " + fileName);
+            return;
+        }
+
+        QTextStream out(&file);
+        out.setEncoding(QStringConverter::Utf8);
+
+        // BOM for Excel UTF-8 recognition
+        out << "\xEF\xBB\xBF";
+
+        // Write header from table column names
+        int colCount = tableWidget->columnCount();
+        QStringList headers;
+        for (int c = 0; c < colCount; ++c)
+            headers << tableWidget->horizontalHeaderItem(c)->text();
+        out << headers.join(",") << "\n";
+
+        // Write all rows currently in the table
+        int rowCount = tableWidget->rowCount();
+        for (int r = 0; r < rowCount; ++r) {
+            QStringList rowData;
+            for (int c = 0; c < colCount; ++c) {
+                QTableWidgetItem* item = tableWidget->item(r, c);
+                QString cellText = item ? item->text() : "";
+                // Escape commas and quotes in cell values
+                if (cellText.contains(",") || cellText.contains("\"") || cellText.contains("\n")) {
+                    cellText = "\"" + cellText.replace("\"", "\"\"") + "\"";
+                }
+                rowData << cellText;
+            }
+            out << rowData.join(",") << "\n";
+        }
+
+        file.close();
+        QMessageBox::information(m_barClickDialog, "导出成功",
+                                 QString("成功导出 %1 条记录到:\n%2").arg(rowCount).arg(fileName));
+    });
 
     // Set dialog background
     m_barClickDialog->setStyleSheet("QDialog { background-color: rgba(15, 25, 45, 230); }");

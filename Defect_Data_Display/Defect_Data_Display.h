@@ -72,6 +72,7 @@ private slots:
     void onDateChanged(const QDate& date);
     void onSearchClicked();
     void performQrCodeSearch(const QString& screenId);
+    void onTimeRangeChangedForSearch(int index);
 
     void onDataLoaded_Aoi(const QMap<QString, QList<QPair<QString, int>>>& defectByType, int totalDefects);
     void onDataLoaded_Inspection(const QMap<QString, int>& passByPeriod, const QMap<QString, int>& failByPeriod,
@@ -107,6 +108,8 @@ private:
     void* m_chartViewLocationAbnormal;
     QTimer* m_timer;
     QDate m_selectedDate;
+    int m_searchStartHour;   // 开始小时 for hourly search (0-23)
+    int m_searchEndHour;     // 结束小时 for hourly search (0-23)
 
     DataLoaderThread* m_workerThread;
     TabDataLoaderThread* m_tabWorkerThread;
@@ -169,13 +172,14 @@ private:
     void loadLocationAbnormalDataAsync(const QString& timeRange);
     void updateLocationAbnormalChart(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
+    void showBarClickDialog(int platformIdx, const QString& timeKey);
+    void showDetailPieDialog();
     QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count
     CachedTabData m_locationAbnormalCache;
     QLabel* m_tooltipLabel;  // custom floating tooltip for platform charts
-    QDialog* m_barClickDialog;  // dialog for bar click details
-
-private slots:
-    void showBarClickDialog(int platformIdx, const QString& timeKey);
+    QDialog* m_barClickDialog;  // dialog for chart click details
+    QMap<QString, int> m_detailPieData;  // detailed tab pie chart data for modal dialog
+    QString m_detailPieTitle;
 };
 
 class DataLoaderThread : public QThread
@@ -184,7 +188,8 @@ class DataLoaderThread : public QThread
 
 public:
     DataLoaderThread(int loadId, const QString& timeRange, const QString& dateRange,
-                     const QString& searchScreenId = "", QObject* parent = nullptr);
+                     const QString& searchScreenId = "", QObject* parent = nullptr,
+                     int startHour = -1, int endHour = -1);
     int getLoadId() const { return m_loadId; }
     void run() override;
 
@@ -209,6 +214,8 @@ protected:
     QString m_timeRange;
     QString m_dateRange;
     QString m_searchScreenId;
+    int m_startHour;  // 开始小时 for hourly search (0-23)
+    int m_endHour;     // 结束小时 for hourly search (0-23)
 };
 
 class TabDataLoaderThread : public QThread

@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<UI version="4.0">
+<ui version="4.0">
  <class>Defect_Data_DisplayClass</class>
  <widget class="QMainWindow" name="Defect_Data_DisplayClass">
-  <property name="objectName">
-   <string notr="true">Defect_Data_DisplayClass</string>
-  </property>
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
     <width>1400</width>
-    <height>900</height>
+    <height>1083</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -162,71 +159,80 @@ QWidget#centralWidget {
       <layout class="QHBoxLayout" name="headerLayout">
        <item>
         <widget class="QLabel" name="logoLabel">
-         <property name="text">
-          <string>IVS LCD 缺陷检测系统</string>
-         </property>
          <property name="styleSheet">
           <string>color: #00d9ff; font-size: 22px; font-weight: bold;</string>
+         </property>
+         <property name="text">
+          <string>IVS LCD 缺陷检测系统</string>
          </property>
         </widget>
        </item>
        <item>
         <spacer name="headerSpacer">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
          <property name="maximumSize">
           <size>
            <width>500</width>
            <height>16777215</height>
           </size>
          </property>
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
         </spacer>
        </item>
        <item>
         <widget class="QLabel" name="dateTimeLabel">
-         <property name="text">
-          <string>2026-05-21 19:48:00</string>
-         </property>
          <property name="styleSheet">
           <string>color: #00d9ff; font-size: 16px;</string>
+         </property>
+         <property name="text">
+          <string>2026-05-21 19:48:00</string>
          </property>
         </widget>
        </item>
        <item>
         <spacer name="btnSpacer">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
          <property name="maximumSize">
           <size>
            <width>20</width>
            <height>16777215</height>
           </size>
          </property>
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
+         </property>
         </spacer>
        </item>
        <item>
         <widget class="QPushButton" name="btnMinimize">
-         <property name="text">
-          <string>_</string>
-         </property>
          <property name="minimumSize">
           <size>
-           <width>36</width>
+           <width>46</width>
            <height>30</height>
           </size>
          </property>
          <property name="styleSheet">
           <string>font-size: 18px; font-weight: bold;</string>
          </property>
+         <property name="text">
+          <string>_</string>
+         </property>
         </widget>
        </item>
        <item>
         <widget class="QPushButton" name="btnClose">
-         <property name="text">
-          <string>X</string>
-         </property>
          <property name="minimumSize">
           <size>
            <width>36</width>
@@ -235,6 +241,9 @@ QWidget#centralWidget {
          </property>
          <property name="styleSheet">
           <string>font-size: 16px; font-weight: bold;</string>
+         </property>
+         <property name="text">
+          <string>X</string>
          </property>
         </widget>
        </item>
@@ -292,30 +301,313 @@ QWidget#centralWidget {
         </widget>
        </item>
        <item>
+        <widget class="QLabel" name="labelStartTime">
+         <property name="text">
+          <string>开始:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="timeEditStart">
+         <property name="minimumSize">
+          <size>
+           <width>126</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <item>
+          <property name="text">
+           <string>00:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>01:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>02:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>03:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>04:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>05:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>06:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>07:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>08:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>09:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>10:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>11:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>12:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>13:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>14:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>15:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>16:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>17:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>18:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>19:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>20:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>21:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>22:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>23:00</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelEndTime">
+         <property name="text">
+          <string>结束:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QComboBox" name="timeEditEnd">
+         <property name="minimumSize">
+          <size>
+           <width>126</width>
+           <height>0</height>
+          </size>
+         </property>
+         <property name="maximumSize">
+          <size>
+           <width>80</width>
+           <height>16777215</height>
+          </size>
+         </property>
+         <item>
+          <property name="text">
+           <string>00:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>01:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>02:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>03:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>04:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>05:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>06:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>07:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>08:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>09:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>10:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>11:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>12:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>13:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>14:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>15:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>16:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>17:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>18:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>19:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>20:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>21:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>22:00</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>23:00</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="btnRefresh">
          <property name="text">
-          <string>刷新数据</string>
+          <string>搜索</string>
          </property>
         </widget>
        </item>
        <item>
         <widget class="QLineEdit" name="searchEdit">
-         <property name="placeholderText">
-          <string>输入二维码搜索</string>
-         </property>
          <property name="maximumSize">
           <size>
            <width>200</width>
            <height>16777215</height>
           </size>
          </property>
+         <property name="placeholderText">
+          <string>输入二维码搜索</string>
+         </property>
         </widget>
        </item>
        <item>
         <widget class="QPushButton" name="btnSearch">
-         <property name="text">
-          <string>搜索</string>
-         </property>
          <property name="maximumSize">
           <size>
            <width>70</width>
@@ -325,12 +617,21 @@ QWidget#centralWidget {
          <property name="cursor">
           <cursorShape>PointingHandCursor</cursorShape>
          </property>
+         <property name="text">
+          <string>搜索</string>
+         </property>
         </widget>
        </item>
        <item>
         <spacer name="controlSpacer">
          <property name="orientation">
-          <enum>Qt::Horizontal</enum>
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>0</width>
+           <height>0</height>
+          </size>
          </property>
         </spacer>
        </item>
@@ -347,7 +648,7 @@ QWidget#centralWidget {
     <item>
      <layout class="QHBoxLayout" name="statsLayout">
       <item>
-       <widget class="QFrame" name="cardFrame_1" native="true">
+       <widget class="QFrame" name="cardFrame_1">
         <property name="minimumSize">
          <size>
           <width>150</width>
@@ -357,27 +658,27 @@ QWidget#centralWidget {
         <layout class="QVBoxLayout" name="cardLayout1">
          <item>
           <widget class="QLabel" name="statValue1">
-           <property name="text">
-            <string>0</string>
-           </property>
            <property name="styleSheet">
             <string>color: #00d9ff; font-size: 32px; font-weight: bold;</string>
            </property>
+           <property name="text">
+            <string>0</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="statLabel1">
-           <property name="text">
-            <string>总检测数</string>
-           </property>
            <property name="styleSheet">
             <string>color: #888; font-size: 12px;</string>
            </property>
+           <property name="text">
+            <string>总检测数</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
@@ -385,7 +686,7 @@ QWidget#centralWidget {
        </widget>
       </item>
       <item>
-       <widget class="QFrame" name="cardFrame_2" native="true">
+       <widget class="QFrame" name="cardFrame_2">
         <property name="minimumSize">
          <size>
           <width>150</width>
@@ -395,27 +696,27 @@ QWidget#centralWidget {
         <layout class="QVBoxLayout" name="cardLayout2">
          <item>
           <widget class="QLabel" name="statValue2">
-           <property name="text">
-            <string>0</string>
-           </property>
            <property name="styleSheet">
             <string>color: #00ff88; font-size: 32px; font-weight: bold;</string>
            </property>
+           <property name="text">
+            <string>0</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="statLabel2">
-           <property name="text">
-            <string>通过数</string>
-           </property>
            <property name="styleSheet">
             <string>color: #888; font-size: 12px;</string>
            </property>
+           <property name="text">
+            <string>通过数</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
@@ -423,7 +724,7 @@ QWidget#centralWidget {
        </widget>
       </item>
       <item>
-       <widget class="QFrame" name="cardFrame_3" native="true">
+       <widget class="QFrame" name="cardFrame_3">
         <property name="minimumSize">
          <size>
           <width>150</width>
@@ -433,27 +734,27 @@ QWidget#centralWidget {
         <layout class="QVBoxLayout" name="cardLayout3">
          <item>
           <widget class="QLabel" name="statValue3">
-           <property name="text">
-            <string>0</string>
-           </property>
            <property name="styleSheet">
             <string>color: #ff4444; font-size: 32px; font-weight: bold;</string>
            </property>
+           <property name="text">
+            <string>0</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="statLabel3">
-           <property name="text">
-            <string>失败数</string>
-           </property>
            <property name="styleSheet">
             <string>color: #888; font-size: 12px;</string>
            </property>
+           <property name="text">
+            <string>失败数</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
@@ -461,7 +762,7 @@ QWidget#centralWidget {
        </widget>
       </item>
       <item>
-       <widget class="QFrame" name="cardFrame_4" native="true">
+       <widget class="QFrame" name="cardFrame_4">
         <property name="minimumSize">
          <size>
           <width>150</width>
@@ -471,27 +772,27 @@ QWidget#centralWidget {
         <layout class="QVBoxLayout" name="cardLayout4">
          <item>
           <widget class="QLabel" name="statValue4">
-           <property name="text">
-            <string>0%</string>
-           </property>
            <property name="styleSheet">
             <string>color: #00ff88; font-size: 32px; font-weight: bold;</string>
            </property>
+           <property name="text">
+            <string>0%</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="statLabel4">
-           <property name="text">
-            <string>通过率</string>
-           </property>
            <property name="styleSheet">
             <string>color: #888; font-size: 12px;</string>
            </property>
+           <property name="text">
+            <string>通过率</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
@@ -499,7 +800,7 @@ QWidget#centralWidget {
        </widget>
       </item>
       <item>
-       <widget class="QFrame" name="cardFrame_5" native="true">
+       <widget class="QFrame" name="cardFrame_5">
         <property name="minimumSize">
          <size>
           <width>150</width>
@@ -509,27 +810,27 @@ QWidget#centralWidget {
         <layout class="QVBoxLayout" name="cardLayout5">
          <item>
           <widget class="QLabel" name="statValue5">
-           <property name="text">
-            <string>0</string>
-           </property>
            <property name="styleSheet">
             <string>color: #ffaa00; font-size: 32px; font-weight: bold;</string>
            </property>
+           <property name="text">
+            <string>0</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
          <item>
           <widget class="QLabel" name="statLabel5">
-           <property name="text">
-            <string>总缺陷数</string>
-           </property>
            <property name="styleSheet">
             <string>color: #888; font-size: 12px;</string>
            </property>
+           <property name="text">
+            <string>总缺陷数</string>
+           </property>
            <property name="alignment">
-            <set>Qt::AlignCenter</set>
+            <set>Qt::AlignmentFlag::AlignCenter</set>
            </property>
           </widget>
          </item>
@@ -540,14 +841,14 @@ QWidget#centralWidget {
     </item>
     <item>
      <widget class="QTabWidget" name="tabWidget">
-      <property name="currentIndex">
-       <number>0</number>
-      </property>
       <property name="sizePolicy">
        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
         <horstretch>0</horstretch>
         <verstretch>1</verstretch>
        </sizepolicy>
+      </property>
+      <property name="currentIndex">
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tabPlatform">
        <attribute name="title">
@@ -860,9 +1161,6 @@ QFrame {
           <layout class="QHBoxLayout" name="searchResultInfoLayout">
            <item>
             <widget class="QLabel" name="labelSearchId">
-             <property name="text">
-              <string>搜索ID: </string>
-             </property>
              <property name="styleSheet">
               <string>
 QLabel {
@@ -873,14 +1171,17 @@ QLabel {
 }
               </string>
              </property>
+             <property name="text">
+              <string>搜索ID: </string>
+             </property>
             </widget>
            </item>
            <item>
             <spacer name="searchResultInfoSpacer">
              <property name="orientation">
-              <enum>Qt::Horizontal</enum>
+              <enum>Qt::Orientation::Horizontal</enum>
              </property>
-             <property name="sizeHint">
+             <property name="sizeHint" stdset="0">
               <size>
                <width>40</width>
                <height>20</height>
@@ -902,36 +1203,12 @@ QLabel {
           <property name="columnCount">
            <number>6</number>
           </property>
-          <column>
-           <property name="title">
-            <string>Code_AOI</string>
-           </property>
-          </column>
-          <column>
-           <property name="title">
-            <string>Grade_AOI</string>
-           </property>
-          </column>
-          <column>
-           <property name="title">
-            <string>检测数量</string>
-           </property>
-          </column>
-          <column>
-           <property name="title">
-            <string>工位</string>
-           </property>
-          </column>
-          <column>
-           <property name="title">
-            <string>检测时间</string>
-           </property>
-          </column>
-          <column>
-           <property name="title">
-            <string>结果</string>
-           </property>
-          </column>
+          <column/>
+          <column/>
+          <column/>
+          <column/>
+          <column/>
+          <column/>
          </widget>
         </item>
        </layout>
@@ -943,9 +1220,6 @@ QLabel {
        <layout class="QVBoxLayout" name="tabLocationAbnormalLayout">
         <item>
          <widget class="QLabel" name="labelLocationAbnormalTitle">
-          <property name="text">
-           <string>定位异常工位分布</string>
-          </property>
           <property name="styleSheet">
            <string>
 QLabel {
@@ -957,8 +1231,11 @@ QLabel {
 }
            </string>
           </property>
+          <property name="text">
+           <string>定位异常工位分布</string>
+          </property>
           <property name="alignment">
-           <set>Qt::AlignCenter</set>
+           <set>Qt::AlignmentFlag::AlignCenter</set>
           </property>
          </widget>
         </item>
@@ -1105,7 +1382,7 @@ QFrame {
      <x>0</x>
      <y>0</y>
      <width>1400</width>
-     <height>0</height>
+     <height>21</height>
     </rect>
    </property>
   </widget>
@@ -1122,10 +1399,9 @@ QFrame {
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
  </widget>
- <layoutDefault spacing="6"/>
- <pixmapfunction></pixmapfunction>
+ <layoutdefault spacing="6" margin="0"/>
  <resources>
   <include location="Defect_Data_Display.qrc"/>
  </resources>
  <connections/>
-</UI>
+</ui>
