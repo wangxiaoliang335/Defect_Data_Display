@@ -405,7 +405,7 @@ void Defect_Data_Display::showDetailPieDialog()
     QDialog dialog(this);
     dialog.setWindowTitle(m_detailPieTitle.isEmpty() ? "缺陷类型分布" : m_detailPieTitle);
     dialog.setModal(true);
-    dialog.resize(900, 600);
+    dialog.resize(1280, 800);
     dialog.setStyleSheet(R"(
         QDialog {
             background-color: #1a1a2e;
@@ -2843,16 +2843,20 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
     defectColors["Dent"] = QColor(255, 200, 150);
     defectColors["Scratch"] = QColor(100, 255, 255);
 
-    // Create a line series for each defect type
-    QMap<QString, QLineSeries*> seriesMap;
+    // Create a bar series for each defect type
+    QMap<QString, QBarSeries*> seriesMap;
+    QMap<QString, QBarSet*> barSetMap;
     for (const QString& defectType : allDefectTypes) {
-        QLineSeries* series = new QLineSeries();
-        series->setName(defectType);
-        series->setColor(defectColors.value(defectType, Qt::gray));
-        series->setPointLabelsVisible(true);
-        series->setPointLabelsFormat("@yPoint");
-        series->setPointLabelsColor(QColor(255, 255, 255));
-        series->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
+        QBarSet* barSet = new QBarSet(defectType);
+        barSet->setColor(defectColors.value(defectType, Qt::gray));
+        barSet->setLabelColor(QColor(234, 234, 234));
+        barSetMap[defectType] = barSet;
+
+        QBarSeries* series = new QBarSeries();
+        series->setLabelsVisible(true);
+        series->setLabelsFormat("@value");
+        series->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
+        series->append(barSet);
         seriesMap[defectType] = series;
     }
 
@@ -2878,7 +2882,7 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
 
         for (const QString& defectType : allDefectTypes) {
             int count = it.value().value(defectType, 0);
-            seriesMap[defectType]->append(index, count);
+            *(barSetMap[defectType]) << count;
         }
         index++;
     }
@@ -2887,7 +2891,7 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
     for (auto series : seriesMap.values()) {
         chart->addSeries(series);
     }
-    chart->setTitle("Defect Analysis Trend (" + timeRange + ")");
+    chart->setTitle("Defect Analysis (" + timeRange + ")");
 
     QBarCategoryAxis* axisX = new QBarCategoryAxis();
     axisX->append(timeCategories);
@@ -2901,9 +2905,11 @@ void Defect_Data_Display::updateDefectTrendChart(const QMap<QString, QMap<QStrin
     axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
     int maxCount = 1;
     for (auto it = defectTrendData.constBegin(); it != defectTrendData.constEnd(); ++it) {
+        int total = 0;
         for (auto typeIt = it.value().constBegin(); typeIt != it.value().constEnd(); ++typeIt) {
-            if (typeIt.value() > maxCount) maxCount = typeIt.value();
+            total += typeIt.value();
         }
+        if (total > maxCount) maxCount = total;
     }
     axisY->setRange(0, maxCount + maxCount * 0.25);
     chart->addAxis(axisY, Qt::AlignLeft);
