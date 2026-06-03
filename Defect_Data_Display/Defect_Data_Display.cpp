@@ -39,6 +39,7 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_chartViewPlatform1(nullptr)
     , m_chartViewPlatform2(nullptr)
     , m_chartViewPlatform3(nullptr)
+    , m_chartViewPlatformByTime(nullptr)
     , m_chartViewDefectMapping(nullptr)
     , m_chartViewTrend(nullptr)
     , m_chartViewDefectRate(nullptr)
@@ -246,6 +247,8 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
             onRefreshClicked();
         });
     }
+    //ui.tabDefect->hide();
+    //ui.tabInspection->hide();
 }
 
 Defect_Data_Display::~Defect_Data_Display()
@@ -311,24 +314,43 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
     if (event->type() == QEvent::MouseMove) {
         QMouseEvent* me = static_cast<QMouseEvent*>(event);
         bool matched = false;
-        for (int p = 0; p < 4; ++p) {
-            void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
-            QChartView* cv = (QChartView*)chartViewPtrs[p];
-            if (cv && (cv == watched || cv->viewport() == watched)) {
-                QChart* chart = cv->chart();
-                QList<QAbstractSeries*> seriesList = chart->series();
-                if (!seriesList.isEmpty()) {
-                    QPointF chartPos = chart->mapToValue(QPointF(me->pos()), seriesList.first());
-                    showPlatformChartTooltip(cv, p, me->pos(), chartPos);
+
+        // Check if it's the by-time chart
+        if (m_chartViewPlatformByTime && (m_chartViewPlatformByTime == watched || m_chartViewPlatformByTime->viewport() == watched)) {
+            QChart* chart = ((QChartView*)m_chartViewPlatformByTime)->chart();
+            QList<QAbstractSeries*> seriesList = chart->series();
+            if (!seriesList.isEmpty()) {
+                QPointF chartPos = chart->mapToValue(QPointF(me->pos()), seriesList.first());
+                showByTimeChartTooltip(me->pos(), chartPos);
+            }
+            matched = true;
+        }
+
+        if (!matched) {
+            for (int p = 0; p < 4; ++p) {
+                void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+                QChartView* cv = (QChartView*)chartViewPtrs[p];
+                if (cv && (cv == watched || cv->viewport() == watched)) {
+                    QChart* chart = cv->chart();
+                    QList<QAbstractSeries*> seriesList = chart->series();
+                    if (!seriesList.isEmpty()) {
+                        QPointF chartPos = chart->mapToValue(QPointF(me->pos()), seriesList.first());
+                        showPlatformChartTooltip(cv, p, me->pos(), chartPos);
+                    }
+                    matched = true;
+                    break;
                 }
-                matched = true;
-                break;
             }
         }
         if (!matched) {
             m_tooltipLabel->hide();
         }
     } else if (event->type() == QEvent::Leave) {
+        // Check if it's the by-time chart
+        if (m_chartViewPlatformByTime && (m_chartViewPlatformByTime == watched || m_chartViewPlatformByTime->viewport() == watched)) {
+            m_tooltipLabel->hide();
+        }
+
         for (int p = 0; p < 4; ++p) {
             void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
             QChartView* cv = (QChartView*)chartViewPtrs[p];
@@ -385,6 +407,14 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
                 showDetailPieDialog();
                 return true;
             }
+
+            // Handle chartDetail bar chart click
+            QChartView* detailView = static_cast<QChartView*>(m_chartViewDetail);
+            if (detailView && (detailView == watched || detailView->viewport() == watched)) {
+                // The bar click signal is already connected in updateDetailTable via QBarSeries::clicked
+                // This eventFilter handler can be used for additional interactions if needed
+                return false;
+            }
         }
     }
     return QMainWindow::eventFilter(watched, event);
@@ -405,7 +435,15 @@ void Defect_Data_Display::showDetailPieDialog()
     QDialog dialog(this);
     dialog.setWindowTitle(m_detailPieTitle.isEmpty() ? "缺陷类型分布" : m_detailPieTitle);
     dialog.setModal(true);
-    dialog.resize(1280, 800);
+
+    // Calculate dialog size based on row count
+    const int rowCount = m_detailPieData.size();
+    const int tableRowHeight = 40;
+    const int headerHeight = 40;
+    const int tableMinHeight = qMin(rowCount * tableRowHeight + headerHeight, 800); // Max 800px, or calculated height
+    const int dialogWidth = 1500;
+    const int dialogHeight = 200 + tableMinHeight; // 200 for title, pie chart, stats, button
+    dialog.resize(dialogWidth, dialogHeight);
     dialog.setStyleSheet(R"(
         QDialog {
             background-color: #1a1a2e;
@@ -591,13 +629,18 @@ void Defect_Data_Display::showDetailPieDialog()
     table->horizontalHeader()->setStretchLastSection(true);
     table->verticalHeader()->setVisible(false);
     table->setShowGrid(false);
-    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     table->verticalHeader()->setDefaultSectionSize(36);
     table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
+    // Calculate table height based on row count
+    const int rowHeight = 36;
+    const int hdrHeight = 38;
+    const int tableHeight = rowCount * rowHeight + hdrHeight;
+    table->setFixedHeight(tableHeight);
+
     // Set uniform background for all rows
-    const int rowCount = m_detailPieData.size();
     for (int r = 0; r < rowCount; ++r) {
         for (int c = 0; c < 4; ++c) {
             QTableWidgetItem* item = table->item(r, c);
@@ -642,11 +685,12 @@ void Defect_Data_Display::showDetailPieDialog()
         colorIdx++;
     }
 
-    table->setColumnWidth(0, 140);
-    table->setColumnWidth(1, 80);
-    table->setColumnWidth(2, 80);
+    // Adjust column widths for wider dialog
+    table->setColumnWidth(0, 250);
+    table->setColumnWidth(1, 150);
+    table->setColumnWidth(2, 150);
     rightLayout->addWidget(table);
-    contentLayout->addLayout(rightLayout, 2);
+    contentLayout->addLayout(rightLayout, 3);
 
     mainLayout->addLayout(contentLayout);
 
@@ -747,21 +791,23 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
             total += ait.value();
         }
         
-        // Build AOIResult breakdown HTML
+        // Build OK/NG breakdown HTML
         QString section1;
-        QList<QColor> resultColors;
-        resultColors << QColor(0, 255, 136) << QColor(255, 80, 80) << QColor(255, 200, 0)
-                    << QColor(0, 150, 255) << QColor(200, 100, 255) << QColor(255, 150, 150)
-                    << QColor(150, 200, 255) << QColor(200, 255, 150);
-        
-        int colorIdx = 0;
+        int okCount = 0, ngCount = 0;
         for (auto ait = aoiMap.constBegin(); ait != aoiMap.constEnd(); ++ait) {
-            QString colorHex = resultColors[colorIdx % resultColors.size()].name();
-            section1 += QString("<div style='font-size:15px'><span style='color:%1'>%2 : %3</span></div>")
-                .arg(colorHex).arg(ait.key()).arg(ait.value());
-            colorIdx++;
+            if (ait.key() == "OK") okCount = ait.value();
+            else if (ait.key() == "NG") ngCount = ait.value();
         }
-        
+        // Display OK first (green), then NG (red)
+        if (okCount > 0) {
+            section1 += QString("<div style='font-size:15px'><span style='color:%1'>OK : %2</span></div>")
+                .arg(QColor(0, 255, 136).name()).arg(okCount);
+        }
+        if (ngCount > 0) {
+            section1 += QString("<div style='font-size:15px'><span style='color:%1'>NG : %2</span></div>")
+                .arg(QColor(255, 80, 80).name()).arg(ngCount);
+        }
+
         QString tipBody1;
         if (!section1.isEmpty()) {
             tipBody1 = QString("<div style='margin-top:10px;line-height:1.6'>"
@@ -769,20 +815,20 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
                               "%1"
                               "</div>").arg(section1);
         }
-        
+
         tipPassFail = tipBody1;
     } else {
-        // Non-stacked bar - show Pass/Fail
+        // Non-stacked bar - show OK/NG (derived from Pass/Fail)
         if (!m_platformTrendData.contains(originalKey) || !m_platformTrendData[originalKey].contains(platformIdx)) return;
-        
+
         int pass = m_platformTrendData[originalKey][platformIdx].first;
         int fail = m_platformTrendData[originalKey][platformIdx].second;
         total = pass + fail;
-        
+
         tipPassFail = QString(
             "<div style='margin-bottom:12px;line-height:1.8'>"
-            "<div style='font-size:17px'><span style='color:#4ade80'>Pass : %1</span></div>"
-            "<div style='font-size:17px'><span style='color:#f87171'>Fail : %2</span></div>"
+            "<div style='font-size:17px'><span style='color:#4ade80'>OK : %1</span></div>"
+            "<div style='font-size:17px'><span style='color:#f87171'>NG : %2</span></div>"
             "</div>").arg(pass).arg(fail);
     }
 
@@ -801,6 +847,173 @@ void Defect_Data_Display::showPlatformChartTooltip(QChartView* chartView, int pl
 
     // Position tooltip near the mouse, but keep it within the screen bounds
     QPoint globalPos = chartView->viewport()->mapToGlobal(viewportPos);
+    int x = globalPos.x() + 16;
+    int y = globalPos.y() - 20;
+    QScreen* screen = QApplication::screenAt(globalPos);
+    if (screen) {
+        QRect screenGeo = screen->availableGeometry();
+        QSize tipSize = m_tooltipLabel->sizeHint();
+        if (x + tipSize.width() > screenGeo.right()) x = globalPos.x() - tipSize.width() - 16;
+        if (y < screenGeo.top()) y = screenGeo.top() + 4;
+        if (y + tipSize.height() > screenGeo.bottom()) y = screenGeo.bottom() - tipSize.height() - 4;
+    }
+    m_tooltipLabel->move(x, y);
+    m_tooltipLabel->show();
+}
+
+void Defect_Data_Display::showByTimeChartTooltip(const QPoint& viewportPos, const QPointF& chartPos)
+{
+    if (!m_chartViewPlatformByTime) return;
+    QChart* chart = ((QChartView*)m_chartViewPlatformByTime)->chart();
+    QList<QAbstractSeries*> allSeries = chart->series();
+    if (allSeries.isEmpty()) return;
+
+    QRectF plotArea = chart->plotArea();
+    qreal relX = (viewportPos.x() - plotArea.left()) / plotArea.width();
+    qreal relY = (viewportPos.y() - plotArea.top()) / plotArea.height();
+
+    if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return;
+
+    QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
+    if (axesX.isEmpty()) return;
+    QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
+    if (!axisX) return;
+    QStringList categories = axisX->categories();
+    if (categories.isEmpty()) return;
+
+    // AOI result colors (OK=green, NG=red)
+    QList<QColor> resultColors;
+    resultColors << QColor(0, 255, 136) << QColor(255, 80, 80);
+
+    // Get time category from X position
+    int numTimeCategories = categories.size();
+    int timeCategoryIndex = static_cast<int>(relX * numTimeCategories);
+    if (timeCategoryIndex < 0 || timeCategoryIndex >= categories.size()) return;
+    QString timeKey = categories[timeCategoryIndex];
+
+    // Get original key for this time category
+    QString originalKey = m_byTimeCategoryMap.value(timeKey);
+    if (originalKey.isEmpty()) return;
+
+    // Build aggregated tooltip content
+    QString tooltipContent;
+    int grandTotal = 0;
+    QStringList aoiBreakdown;
+
+    // Aggregate data across all 4 platforms
+    for (int p = 0; p < 4; ++p) {
+        if (!m_platformAoiResultData.isEmpty()) {
+            if (m_platformAoiResultData.contains(originalKey) && m_platformAoiResultData[originalKey].contains(p)) {
+                const QMap<QString, int>& aoiMap = m_platformAoiResultData[originalKey][p];
+                for (auto ait = aoiMap.constBegin(); ait != aoiMap.constEnd(); ++ait) {
+                    if (ait.value() > 0) {
+                        // Find or create entry for this AOI result type
+                        QString resultKey = ait.key();
+                        bool found = false;
+                        for (int i = 0; i < aoiBreakdown.size(); ++i) {
+                            QString existing = aoiBreakdown[i];
+                            if (existing.startsWith(resultKey + "::")) {
+                                // Parse existing count and add to it
+                                QStringList parts = existing.split("::");
+                                if (parts.size() >= 2) {
+                                    int existingCount = parts[1].toInt();
+                                    int newCount = existingCount + ait.value();
+                                    aoiBreakdown[i] = resultKey + "::" + QString::number(newCount);
+                                }
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            aoiBreakdown.append(resultKey + "::" + QString::number(ait.value()));
+                        }
+                        grandTotal += ait.value();
+                    }
+                }
+            }
+        } else if (!m_platformTrendData.isEmpty()) {
+            if (m_platformTrendData.contains(originalKey) && m_platformTrendData[originalKey].contains(p)) {
+                QPair<int, int> passFail = m_platformTrendData[originalKey][p];
+                // Aggregate Pass -> OK
+                if (passFail.first > 0) {
+                    bool found = false;
+                    for (int i = 0; i < aoiBreakdown.size(); ++i) {
+                        if (aoiBreakdown[i].startsWith("OK::")) {
+                            QStringList parts = aoiBreakdown[i].split("::");
+                            if (parts.size() >= 2) {
+                                int existingCount = parts[1].toInt();
+                                aoiBreakdown[i] = "OK::" + QString::number(existingCount + passFail.first);
+                            }
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        aoiBreakdown.append("OK::" + QString::number(passFail.first));
+                    }
+                    grandTotal += passFail.first;
+                }
+                // Aggregate Fail -> NG
+                if (passFail.second > 0) {
+                    bool found = false;
+                    for (int i = 0; i < aoiBreakdown.size(); ++i) {
+                        if (aoiBreakdown[i].startsWith("NG::")) {
+                            QStringList parts = aoiBreakdown[i].split("::");
+                            if (parts.size() >= 2) {
+                                int existingCount = parts[1].toInt();
+                                aoiBreakdown[i] = "Fail::" + QString::number(existingCount + passFail.second);
+                            }
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        aoiBreakdown.append("Fail::" + QString::number(passFail.second));
+                    }
+                    grandTotal += passFail.second;
+                }
+            }
+        }
+    }
+
+    // Build the AOI breakdown HTML (OK/NG display with fixed colors)
+    QString aoiHtml;
+    int okCount = 0, ngCount = 0;
+    for (int i = 0; i < aoiBreakdown.size(); ++i) {
+        QStringList parts = aoiBreakdown[i].split("::");
+        if (parts.size() >= 2) {
+            QString resultName = parts[0];
+            int count = parts[1].toInt();
+            if (resultName == "OK") okCount = count;
+            else if (resultName == "NG") ngCount = count;
+        }
+    }
+    // Display OK first (green), then NG (red)
+    if (okCount > 0) {
+        aoiHtml += QString("<div style='font-size:14px;margin-left:15px'><span style='color:%1'>OK : %2</span></div>")
+            .arg(QColor(0, 255, 136).name()).arg(okCount);
+    }
+    if (ngCount > 0) {
+        aoiHtml += QString("<div style='font-size:14px;margin-left:15px'><span style='color:%1'>NG : %2</span></div>")
+            .arg(QColor(255, 80, 80).name()).arg(ngCount);
+    }
+
+    QString tip = QString(
+        "<div style='background:#1e2a3a;color:#fff;padding:16px 20px;border-radius:12px;"
+        "border:1px solid #3a4a5a;min-width:300px;font-family:Arial,sans-serif'>"
+        "<div style='border-bottom:1px solid #3a4a5a;padding-bottom:10px;margin-bottom:10px'>"
+        "<div style='color:#00d9ff;font-size:14px'>Time: %1</div>"
+        "<span style='font-size:14px;color:#aaaaaa'>Total : </span>"
+        "<span style='font-size:22px;font-weight:bold;color:#ffffff'>%2</span>"
+        "</div>"
+        "%3"
+        "</div>"
+    ).arg(timeKey).arg(grandTotal).arg(aoiHtml);
+
+    m_tooltipLabel->setText(tip);
+
+    // Position tooltip near the mouse
+    QPoint globalPos = m_chartViewPlatformByTime->viewport()->mapToGlobal(viewportPos);
     int x = globalPos.x() + 16;
     int y = globalPos.y() - 20;
     QScreen* screen = QApplication::screenAt(globalPos);
@@ -991,11 +1204,19 @@ void Defect_Data_Display::onDateChanged(const QDate& date)
     // Invalidate location abnormal cache when date changes
     m_locationAbnormalCache.timestamp = 0;
 
-    // If currently on location abnormal tab (index 6 or 7), reload data immediately
+    // If currently on location abnormal tab (index 4), reload data immediately
     int currentTabIndex = ui.tabWidget->currentIndex();
-    if (currentTabIndex == 6 || currentTabIndex == 7) {
+    if (currentTabIndex == 4) {
         QString timeRange = ui.comboTimeRange->currentText();
         loadLocationAbnormalDataAsync(timeRange);
+    }
+
+    // If currently on "按时间" (by-time) sub-tab, update the by-time chart
+    if (currentTabIndex == 0 && ui.tabPlatformPages->currentIndex() == 0) {
+        qDebug() << "Date changed while on by-time tab, updating chart";
+        if (m_chartViewPlatformByTime) {
+            updatePlatformByTimeChart();
+        }
     }
 
     // Always refresh main page data when date changes
@@ -1012,15 +1233,23 @@ void Defect_Data_Display::onTabChanged(int index)
         qDebug() << "=== Timer fired, processing index:" << index << "===";
         qDebug() << "Timer lambda: starting switch";
         switch (index) {
-        case 0:
-        case 1:
-        case 2:
-        case 3: {
-            // Platform chart tab (index 0-3)
-            // Data is already loaded via onDataLoaded_PlatformAoiResult
-            // Just need to update labels after tab switch (chart needs time to layout)
-            int platformIdx = index;
-            qDebug() << "Index 0-3: Platform" << platformIdx << "tab switched to, scheduling label update";
+        case 0: {
+            // Platform chart tab (index 0)
+            // Check if "按时间" sub-tab (index 0) is selected
+            int platformIdx = ui.tabPlatformPages->currentIndex();
+            
+            if (platformIdx == 0) {
+                // "按时间" tab selected - call updatePlatformByTimeChart
+                qDebug() << "Index 0: By-time tab selected, scheduling chart update";
+                QTimer::singleShot(50, this, [this]() {
+                    if (!m_chartViewPlatformByTime) return;
+                    updatePlatformByTimeChart();
+                });
+                break;
+            }
+            
+            // For platform tabs 1-4, update the platform-specific charts
+            qDebug() << "Index 0: Platform" << platformIdx << "tab switched to, scheduling label update";
             
             // Get the chart for this platform
             void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
@@ -1108,8 +1337,8 @@ void Defect_Data_Display::onTabChanged(int index)
             });
             break;
         }
-        case 4: {
-            qDebug() << "Index 4: Trend";
+        case 1: {
+            qDebug() << "Index 1: Trend";
             CachedTabData* cache = &m_trendCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
                 updateTrendChart(cache->trendData, cache->defectRates);
@@ -1118,8 +1347,8 @@ void Defect_Data_Display::onTabChanged(int index)
             }
             break;
         }
-        case 5: {
-            qDebug() << "Index 5: Detail";
+        case 2: {
+            qDebug() << "Index 2: Detail";
             CachedTabData* cache = &m_detailCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
                 qDebug() << "Using cache, calling updateDetailTable from tab changed";
@@ -1130,20 +1359,14 @@ void Defect_Data_Display::onTabChanged(int index)
             }
             break;
         }
-        case 6: {  // TAB_LOCATION_ABNORMAL (some configurations use 6 instead of 7)
-            qDebug() << "=== Index 6: Location Abnormal - LOADING DATA ===";
-            CachedTabData* cache = &m_locationAbnormalCache;
-            if (isCacheValid(cache, timeRange, m_selectedDate)) {
-                qDebug() << "Using cache, calling updateLocationAbnormalChart";
-                updateLocationAbnormalChart(m_locationAbnormalData);
-            } else {
-                qDebug() << "Cache invalid, calling loadLocationAbnormalDataAsync";
-                loadLocationAbnormalDataAsync(timeRange);
-            }
+        case 3: {
+            // Search results tab
+            // No additional loading needed, data is searched on demand
+            qDebug() << "Index 3: Search results (no auto-load)";
             break;
         }
-        case 7: {  // TAB_LOCATION_ABNORMAL
-            qDebug() << "=== Index 7: Location Abnormal - LOADING DATA ===";
+        case 4: {  // TAB_LOCATION_ABNORMAL
+            qDebug() << "=== Index 4: Location Abnormal - LOADING DATA ===";
             CachedTabData* cache = &m_locationAbnormalCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
                 qDebug() << "Using cache, calling updateLocationAbnormalChart";
@@ -1167,12 +1390,21 @@ void Defect_Data_Display::onPlatformTabChanged(int index)
 {
     qDebug() << "=== onPlatformTabChanged called with index:" << index << "===";
 
-    // Platform tab (index 0-3)
-    if (index < 0 || index > 3) return;
+    // Index 0 = "按时间" (aggregate view)
+    if (index == 0) {
+        if (!m_chartViewPlatformByTime) return;
+        updatePlatformByTimeChart();
+        return;
+    }
+
+    // Platform tab (index 1-4 corresponds to platform 0-3)
+    if (index < 1 || index > 4) return;
+
+    int platformIdx = index - 1;
 
     // Get the chart for this platform
     void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
-    QChartView* chartView = (QChartView*)chartViewPtrs[index];
+    QChartView* chartView = (QChartView*)chartViewPtrs[platformIdx];
     if (!chartView) return;
     QChart* chart = chartView->chart();
 
@@ -1352,6 +1584,28 @@ void Defect_Data_Display::setupCharts()
     layout3->setContentsMargins(0, 0, 0, 0);
     layout3->addWidget((QChartView*)m_chartViewPlatform3);
 
+    // Create "按时间" chart - aggregate of all platforms by time
+    QChart* chartByTime = new QChart();
+    chartByTime->setTitle("缺陷统计 (按时间)");
+    chartByTime->setAnimationOptions(QChart::NoAnimation);
+    chartByTime->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartByTime->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    chartByTime->legend()->setLabelColor(QColor(234, 234, 234));
+    chartByTime->legend()->setAlignment(Qt::AlignTop);
+    chartByTime->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartByTime->setMargins(QMargins(0, 0, 0, 0));
+    m_chartViewPlatformByTime = new QChartView(chartByTime);
+    ((QChartView*)m_chartViewPlatformByTime)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewPlatformByTime)->setMinimumHeight(600);
+    ((QChartView*)m_chartViewPlatformByTime)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    ((QChartView*)m_chartViewPlatformByTime)->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    QVBoxLayout* layoutByTime = new QVBoxLayout(ui.chartPlatformByTime);
+    layoutByTime->setSpacing(0);
+    layoutByTime->setContentsMargins(0, 0, 0, 0);
+    layoutByTime->addWidget((QChartView*)m_chartViewPlatformByTime);
+
+    // Hidden: tabDefect - AOI Defect Analysis chart
+    /*
     QChart* chartAoi = new QChart();
     chartAoi->setTitle("AOI Defect Analysis");
     chartAoi->setAnimationOptions(QChart::NoAnimation);
@@ -1367,7 +1621,10 @@ void Defect_Data_Display::setupCharts()
     QVBoxLayout* layoutAoi = new QVBoxLayout(ui.chartAoiDefect);
     layoutAoi->setContentsMargins(0, 0, 0, 0);
     layoutAoi->addWidget((QChartView*)m_chartViewAoi);
+    */
 
+    // Hidden: tabInspection - Inspection Pass/Fail charts
+    /*
     // Create Inspection Pass chart
     QChart* chartPass = new QChart();
     chartPass->setTitle("Pass Count Trend");
@@ -1403,7 +1660,10 @@ void Defect_Data_Display::setupCharts()
     layoutFail->setSpacing(0);
     layoutFail->setContentsMargins(0, 0, 0, 0);
     layoutFail->addWidget((QChartView*)m_chartViewInspectionFail);
+    */
 
+    // Hidden: tabMapping - Defect Position Map chart
+    /*
     QChart* chartMapping = new QChart();
     chartMapping->setTitle("Defect Position Map");
     chartMapping->setAnimationOptions(QChart::NoAnimation);
@@ -1419,6 +1679,7 @@ void Defect_Data_Display::setupCharts()
     QVBoxLayout* layoutMapping = new QVBoxLayout(ui.chartDefectMapping);
     layoutMapping->setContentsMargins(0, 0, 0, 0);
     layoutMapping->addWidget((QChartView*)m_chartViewDefectMapping);
+    */
 
     QChart* chartTrend = new QChart();
     chartTrend->setTitle("Defect Count Trend");
@@ -1556,6 +1817,8 @@ void Defect_Data_Display::onRefreshClicked()
             this, &Defect_Data_Display::onDataLoaded_DefectTrend, Qt::QueuedConnection);
     connect(m_workerThread, &DataLoaderThread::inspectionTrendLoaded,
             this, &Defect_Data_Display::onDataLoaded_InspectionTrend, Qt::QueuedConnection);
+    connect(m_workerThread, &DataLoaderThread::platformGradeTrendLoaded,
+            this, &Defect_Data_Display::onDataLoaded_PlatformGradeTrend, Qt::QueuedConnection);
 
     qDebug() << "Starting worker thread...";
     m_workerThread->start();
@@ -1580,31 +1843,39 @@ void Defect_Data_Display::clearAllCharts()
         }
     }
 
-    // Clear AOI chart
-    QChart* aoiChart = ((QChartView*)m_chartViewAoi)->chart();
-    aoiChart->removeAllSeries();
-    for (auto axis : aoiChart->axes()) {
-        aoiChart->removeAxis(axis);
+    // Clear AOI chart (hidden tab)
+    if (m_chartViewAoi) {
+        QChart* aoiChart = ((QChartView*)m_chartViewAoi)->chart();
+        aoiChart->removeAllSeries();
+        for (auto axis : aoiChart->axes()) {
+            aoiChart->removeAxis(axis);
+        }
     }
 
-    // Clear inspection charts
-    QChart* passChart = ((QChartView*)m_chartViewInspectionPass)->chart();
-    passChart->removeAllSeries();
-    for (auto axis : passChart->axes()) {
-        passChart->removeAxis(axis);
+    // Clear inspection charts (hidden tab)
+    if (m_chartViewInspectionPass) {
+        QChart* passChart = ((QChartView*)m_chartViewInspectionPass)->chart();
+        passChart->removeAllSeries();
+        for (auto axis : passChart->axes()) {
+            passChart->removeAxis(axis);
+        }
     }
 
-    QChart* failChart = ((QChartView*)m_chartViewInspectionFail)->chart();
-    failChart->removeAllSeries();
-    for (auto axis : failChart->axes()) {
-        failChart->removeAxis(axis);
+    if (m_chartViewInspectionFail) {
+        QChart* failChart = ((QChartView*)m_chartViewInspectionFail)->chart();
+        failChart->removeAllSeries();
+        for (auto axis : failChart->axes()) {
+            failChart->removeAxis(axis);
+        }
     }
 
-    // Clear defect mapping chart
-    QChart* mappingChart = ((QChartView*)m_chartViewDefectMapping)->chart();
-    mappingChart->removeAllSeries();
-    for (auto axis : mappingChart->axes()) {
-        mappingChart->removeAxis(axis);
+    // Clear defect mapping chart (hidden tab)
+    if (m_chartViewDefectMapping) {
+        QChart* mappingChart = ((QChartView*)m_chartViewDefectMapping)->chart();
+        mappingChart->removeAllSeries();
+        for (auto axis : mappingChart->axes()) {
+            mappingChart->removeAxis(axis);
+        }
     }
 
     // Clear trend chart
@@ -1622,9 +1893,9 @@ void Defect_Data_Display::onTimeRangeChanged(int index)
     // Invalidate location abnormal cache when time range changes
     m_locationAbnormalCache.timestamp = 0;
 
-    // If currently on location abnormal tab (index 6 or 7), reload data immediately
+    // If currently on location abnormal tab (index 4), reload data immediately
     int currentTabIndex = ui.tabWidget->currentIndex();
-    if (currentTabIndex == 6 || currentTabIndex == 7) {
+    if (currentTabIndex == 4) {
         QString timeRange = ui.comboTimeRange->currentText();
         loadLocationAbnormalDataAsync(timeRange);
     }
@@ -1742,6 +2013,11 @@ void Defect_Data_Display::onDataLoaded_PlatformTrend(const QMap<QString, QMap<in
     } else {
         qDebug() << "Waiting for AOIResult data to draw stacked chart...";
     }
+
+    // If user is on the by-time tab, also update the by-time chart
+    if (ui.tabPlatformPages->currentIndex() == 0 && m_chartViewPlatformByTime) {
+        updatePlatformByTimeChart();
+    }
 }
 
 void Defect_Data_Display::onDataLoaded_DefectTrend(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange)
@@ -1762,6 +2038,160 @@ void Defect_Data_Display::onDataLoaded_InspectionTrend(const QMap<QString, QPair
     m_currentTimeFormat = timeRange;
 
     updateInspectionTrendChart(inspectionTrendData);
+}
+
+void Defect_Data_Display::onDataLoaded_PlatformGradeTrend(const QMap<QString, QMap<QString, int>>& gradeTrendData, const QStringList& allGrades, const QString& timeRange)
+{
+    qDebug() << "[GradeTrend] Received grade trend data:" << gradeTrendData.size() << "time periods, grades:" << allGrades;
+    m_platformGradeTrendData = gradeTrendData;
+    updatePlatformGradeTrendChart(gradeTrendData, allGrades, timeRange);
+}
+
+void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap<QString, int>>& gradeTrendData, const QStringList& allGrades, const QString& timeRange)
+{
+    qDebug() << "updatePlatformGradeTrendChart called with" << gradeTrendData.size() << "time periods, grades:" << allGrades;
+
+    if (gradeTrendData.isEmpty()) {
+        qDebug() << "No grade trend data";
+        ((QChartView*)m_chartViewTrend)->chart()->removeAllSeries();
+        return;
+    }
+
+    // Sort grades: OK first, then R1-R5, then others alphabetically
+    QStringList sortedGrades = allGrades;
+    std::sort(sortedGrades.begin(), sortedGrades.end(), [](const QString& a, const QString& b) {
+        if (a == "OK") return true;
+        if (b == "OK") return false;
+        if (a.startsWith("R") && b.startsWith("R")) {
+            bool aOk, bOk;
+            int aNum = a.mid(1).toInt(&aOk);
+            int bNum = b.mid(1).toInt(&bOk);
+            if (aOk && bOk) return aNum < bNum;
+        }
+        return a < b;
+    });
+
+    // Sort time periods
+    QStringList sortedTimes = gradeTrendData.keys();
+    if (timeRange == "按小时" || timeRange == "按天") {
+        std::sort(sortedTimes.begin(), sortedTimes.end(), [](const QString& a, const QString& b) {
+            return a < b;
+        });
+    }
+
+    // Format time labels for display
+    QStringList timeLabels;
+    for (const QString& timeKey : sortedTimes) {
+        QString label = timeKey;
+        if (timeRange == "按小时") {
+            if (label.contains(" ")) {
+                label = label.split(" ").at(1).left(5);
+            }
+        } else if (timeRange == "按天") {
+            if (label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3) {
+                    label = parts.at(2);
+                }
+            }
+        }
+        timeLabels.append(label);
+    }
+
+    // Grade colors (same as pie/bar charts)
+    QMap<QString, QColor> gradeColors;
+    gradeColors["OK"] = QColor(0, 255, 136);
+    gradeColors["R1"] = QColor(255, 68, 68);
+    gradeColors["R2"] = QColor(255, 165, 0);
+    gradeColors["R3"] = QColor(255, 215, 0);
+    gradeColors["R4"] = QColor(50, 205, 50);
+    gradeColors["R5"] = QColor(0, 191, 255);
+    gradeColors["NG"] = QColor(255, 0, 0);
+    QList<QColor> otherColors = {
+        QColor(138, 43, 226), QColor(255, 20, 147), QColor(64, 224, 208),
+        QColor(255, 127, 80), QColor(106, 90, 205), QColor(152, 251, 152)
+    };
+
+    // Clear existing chart
+    QChart* chart = ((QChartView*)m_chartViewTrend)->chart();
+    chart->removeAllSeries();
+    for (auto axis : chart->axes()) {
+        chart->removeAxis(axis);
+    }
+
+    // Create one line series per grade type
+    int colorIdx = 0;
+    for (const QString& grade : sortedGrades) {
+        QLineSeries* series = new QLineSeries();
+        series->setName(grade);
+
+        // Get color
+        if (gradeColors.contains(grade)) {
+            series->setColor(gradeColors[grade]);
+        } else {
+            series->setColor(otherColors[colorIdx % otherColors.size()]);
+            colorIdx++;
+        }
+
+        // Populate data points
+        for (int i = 0; i < sortedTimes.size(); ++i) {
+            QString timeKey = sortedTimes[i];
+            int count = gradeTrendData[timeKey].value(grade, 0);
+            series->append(i, count);
+        }
+
+        chart->addSeries(series);
+    }
+
+    // Set chart title and style
+    chart->setTitle("Grade_AOI 趋势分析 (" + timeRange + ")");
+    chart->setAnimationOptions(QChart::AllAnimations);
+    chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    chart->legend()->setLabelColor(QColor(234, 234, 234));
+    chart->legend()->setFont(QFont("Arial", 9));
+    chart->legend()->setAlignment(Qt::AlignRight);
+
+    // X axis (time periods)
+    QBarCategoryAxis* axisX = new QBarCategoryAxis();
+    axisX->append(timeLabels);
+    axisX->setLabelsColor(QColor(234, 234, 234));
+    QFont axisXFont = axisX->labelsFont();
+    axisXFont.setPointSize(9);
+    axisX->setLabelsFont(axisXFont);
+    chart->addAxis(axisX, Qt::AlignBottom);
+
+    // Y axis (count)
+    QValueAxis* axisY = new QValueAxis();
+    axisY->setTitleText("Count");
+    axisY->setLabelFormat("%d");
+    axisY->setLabelsColor(QColor(234, 234, 234));
+    QFont axisYFont = axisY->labelsFont();
+    axisYFont.setPointSize(10);
+    axisY->setLabelsFont(axisYFont);
+    axisY->setRange(0, 100);  // Will auto-adjust
+    chart->addAxis(axisY, Qt::AlignLeft);
+
+    // Attach axes to all series
+    for (auto series : chart->series()) {
+        series->attachAxis(axisX);
+        series->attachAxis(axisY);
+    }
+
+    // Find max value for Y axis range
+    int maxVal = 0;
+    for (auto series : chart->series()) {
+        QLineSeries* ls = qobject_cast<QLineSeries*>(series);
+        if (ls) {
+            for (const QPointF& point : ls->points()) {
+                if (point.y() > maxVal) maxVal = point.y();
+            }
+        }
+    }
+    if (maxVal < 1) maxVal = 1;
+    axisY->setRange(0, maxVal + maxVal * 0.2);
+
+    qDebug() << "updatePlatformGradeTrendChart completed successfully";
 }
 
 QString Defect_Data_Display::getTimeFilterClause(const QString& timeRange)
@@ -1817,6 +2247,11 @@ void Defect_Data_Display::updateStats(int totalInspect, int passCount, int failC
 
 void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<QString, int>>>& defectByType)
 {
+    if (!m_chartViewAoi) {
+        qDebug() << "m_chartViewAoi not initialized, returning early";
+        return;
+    }
+
     QChart* chart = ((QChartView*)m_chartViewAoi)->chart();
     chart->removeAllSeries();
 
@@ -1885,6 +2320,11 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
 void Defect_Data_Display::updateDefectMappingChart(const QList<QPair<int, int>>& defectPositions, const QStringList& defectTypes)
 {
     qDebug() << "updateDefectMappingChart called with" << defectPositions.size() << "positions";
+
+    if (!m_chartViewDefectMapping) {
+        qDebug() << "m_chartViewDefectMapping not initialized, returning early";
+        return;
+    }
 
     QChart* chart = ((QChartView*)m_chartViewDefectMapping)->chart();
     chart->removeAllSeries();
@@ -2250,68 +2690,74 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
         return;
     }
 
-    qDebug() << "Step 1: Counting defects by type";
+    qDebug() << "Step 1: Processing Grade_AOI data (R1, R2, R3, etc.)";
 
-    // Count by Code_AOI (row[0]) using actual count from row[2]
-    QMap<QString, int> defectCountByType;
+    // Data format: row[0] = grade_result (OK/NG), row[1] = count
+    // Aggregate counts by Grade_AOI value
+    QMap<QString, int> gradeCount;
     for (const QVariantList& row : defectDetails) {
-        QString codeAoi = row[0].toString();
-        int cnt = row[2].toInt();
-        defectCountByType[codeAoi] = defectCountByType.value(codeAoi, 0) + cnt;
+        QString gradeAOI = row[0].toString();  // grade_result (OK/NG)
+        int cnt = row[1].toInt();              // count
+        gradeCount[gradeAOI] += cnt;
     }
 
-    m_detailPieData = defectCountByType;
-    m_detailPieTitle = QString("缺陷类型分布");
+    m_detailPieData = gradeCount;
+    m_detailPieTitle = QString("AOI Grade Types");
 
-    qDebug() << "Step 2: Defect types count =" << defectCountByType.size();
+    qDebug() << "Step 2: Found" << gradeCount.size() << "unique Grade_AOI types:" << gradeCount.keys();
 
-    if (defectCountByType.isEmpty()) {
-        qDebug() << "No defect types found, returning early";
+    if (gradeCount.isEmpty()) {
+        qDebug() << "No Grade_AOI data found, returning early";
         return;
     }
 
-    qDebug() << "Step 3: Creating pie series";
+    // Color map for Grade_AOI types
+    QMap<QString, QColor> gradeColors;
+    gradeColors["OK"] = QColor(0, 255, 136);      // Green
+    gradeColors["R1"] = QColor(255, 68, 68);      // Red (critical)
+    gradeColors["R2"] = QColor(255, 165, 0);      // Orange
+    gradeColors["R3"] = QColor(255, 215, 0);      // Gold/Yellow
+    gradeColors["R4"] = QColor(50, 205, 50);      // Lime Green
+    gradeColors["R5"] = QColor(0, 191, 255);      // Deep Sky Blue
+    gradeColors["NG"] = QColor(255, 0, 0);       // Pure Red
+    // For any other grade types, generate a color
+    QList<QColor> otherColors = {
+        QColor(138, 43, 226),   // Blue Violet
+        QColor(255, 20, 147),   // Deep Pink
+        QColor(64, 224, 208),   // Turquoise
+        QColor(255, 127, 80),   // Coral
+        QColor(106, 90, 205),   // Slate Blue
+        QColor(152, 251, 152),  // Pale Green
+        QColor(255, 182, 193),  // Light Pink
+        QColor(175, 238, 238)   // Pale Turquoise
+    };
+
+    qDebug() << "Step 3: Creating pie series with Grade_AOI colors";
 
     QPieSeries* pieSeries = new QPieSeries();
     pieSeries->setLabelsVisible(true);
 
-    // Define a palette of bright and distinguishable colors
-    QList<QColor> colorPalette;
-    colorPalette << QColor(255, 80, 80)   // Bright Red
-                << QColor(255, 220, 0)    // Bright Yellow
-                << QColor(0, 200, 255)   // Cyan Blue
-                << QColor(200, 100, 255)  // Purple
-                << QColor(80, 255, 120)   // Green
-                << QColor(255, 140, 200)  // Pink
-                << QColor(255, 160, 60)   // Orange
-                << QColor(100, 180, 255)  // Light Blue
-                << QColor(180, 255, 180)  // Light Green
-                << QColor(255, 200, 100)  // Light Orange
-                << QColor(150, 150, 255)  // Lavender
-                << QColor(255, 150, 150); // Salmon
-
-    int colorIndex = 0;
-    for (auto it = defectCountByType.constBegin(); it != defectCountByType.constEnd(); ++it) {
-        QString defectType = it.key();
+    int colorIdx = 0;
+    for (auto it = gradeCount.constBegin(); it != gradeCount.constEnd(); ++it) {
+        QString gradeAOI = it.key();
         int count = it.value();
-        QPieSlice* slice = pieSeries->append(defectType, count);
-        slice->setColor(colorPalette[colorIndex % colorPalette.size()]);
+        QPieSlice* slice = pieSeries->append(gradeAOI, count);
+
+        // Use predefined color if available, otherwise cycle through other colors
+        if (gradeColors.contains(gradeAOI)) {
+            slice->setColor(gradeColors[gradeAOI]);
+        } else {
+            slice->setColor(otherColors[colorIdx % otherColors.size()]);
+            colorIdx++;
+        }
         slice->setLabelBrush(QBrush(QColor(234, 234, 234)));
         slice->setLabelFont(QFont("Arial", 10, QFont::Bold));
-        colorIndex++;
-    }
-
-    // Force set colors after adding all slices
-    int idx = 0;
-    for (QPieSlice* slice : pieSeries->slices()) {
-        slice->setColor(colorPalette[idx % colorPalette.size()]);
-        idx++;
     }
 
     qDebug() << "Step 4: Creating pie chart";
 
     QChart* pieChart = new QChart();
-    pieChart->setTitle("缺陷类型分布");
+    pieChart->setTitle("AOI Grade Types");
     pieChart->setAnimationOptions(QChart::NoAnimation);
     pieChart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     pieChart->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -2345,26 +2791,48 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     }
     m_chartViewPieDetail = newPieChartView;
 
-    qDebug() << "Step 7: Creating bar series";
+    qDebug() << "Step 7: Creating bar series for Grade_AOI types";
+
+    // Create vertical bar chart with ONE bar containing all grade counts
     QBarSeries* series = new QBarSeries();
     series->setLabelsVisible(true);
     series->setLabelsFormat("@value");
-    series->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
-    QBarSet* set = new QBarSet("Count");
-    set->setColor(QColor(0, 217, 255));
 
-    QStringList categories;
-    for (auto it = defectCountByType.constBegin(); it != defectCountByType.constEnd(); ++it) {
-        categories.append(it.key());
-        *set << it.value();
+    // Sort grades for consistent display: OK first, then R1-R5, then others alphabetically
+    QStringList sortedGrades = gradeCount.keys();
+    std::sort(sortedGrades.begin(), sortedGrades.end(), [](const QString& a, const QString& b) {
+        if (a == "OK") return true;
+        if (b == "OK") return false;
+        if (a.startsWith("R") && b.startsWith("R")) {
+            bool aOk, bOk;
+            int aNum = a.mid(1).toInt(&aOk);
+            int bNum = b.mid(1).toInt(&bOk);
+            if (aOk && bOk) return aNum < bNum;
+        }
+        return a < b;
+    });
+
+    // Create ONE BarSet containing all grade counts
+    QBarSet* barSet = new QBarSet("Grade Counts");
+    for (const QString& grade : sortedGrades) {
+        int count = gradeCount[grade];
+        *barSet << count;
     }
+    // Apply a single color to all bars (setColor applies to all bars)
+    barSet->setColor(QColor(0, 217, 255));
+    series->append(barSet);
 
-    series->append(set);
+    // Connect bar click signal for grade type chart
+    QObject::connect(series, &QBarSeries::clicked, this, [=](int index, QBarSet* barSet) {
+        qDebug() << "[BarChart] Clicked bar index:" << index << "grade:" << sortedGrades.value(index, "Unknown");
+        QString gradeName = sortedGrades.value(index, "Unknown");
+        showGradeTypeDialog(gradeName);
+    });
 
     qDebug() << "Step 8: Creating bar chart";
 
     QChart* chart = new QChart();
-    chart->setTitle("Code_AOI Distribution");
+    chart->setTitle("AOI Grade Types");
     chart->setAnimationOptions(QChart::NoAnimation);
     chart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     chart->setTitleBrush(QBrush(QColor(0, 217, 255)));
@@ -2374,6 +2842,9 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     QChartView* newDetailChartView = new QChartView(chart);
     newDetailChartView->setRenderHint(QPainter::Antialiasing);
     newDetailChartView->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    newDetailChartView->setCursor(Qt::PointingHandCursor);
+    newDetailChartView->installEventFilter(this);
+    newDetailChartView->viewport()->installEventFilter(this);
 
     qDebug() << "Step 9: Adding bar chart to layout";
 
@@ -2398,14 +2869,16 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
 
     qDebug() << "Step 11: Creating axes";
 
+    // X axis = grade names (categories) ← goes at bottom
     QBarCategoryAxis* axisX = new QBarCategoryAxis();
-    axisX->append(categories);
+    axisX->append(sortedGrades);
     axisX->setLabelsColor(QColor(234, 234, 234));
     QFont axisXFont = axisX->labelsFont();
     axisXFont.setPointSize(10);
     axisX->setLabelsFont(axisXFont);
     chart->addAxis(axisX, Qt::AlignBottom);
 
+    // Y axis = values (counts) ← goes at left
     QValueAxis* axisY = new QValueAxis();
     axisY->setTitleText("Count");
     axisY->setLabelFormat("%d");
@@ -2413,11 +2886,12 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     QFont axisYFont = axisY->labelsFont();
     axisYFont.setPointSize(10);
     axisY->setLabelsFont(axisYFont);
-    // Set minimum to 0 and add top padding for labels
-    int maxVal = 1;
-    for (auto it = defectCountByType.constBegin(); it != defectCountByType.constEnd(); ++it) {
-        if (it.value() > maxVal) maxVal = it.value();
+    // Find max value for Y axis range
+    int maxVal = 0;
+    for (int val : gradeCount.values()) {
+        if (val > maxVal) maxVal = val;
     }
+    if (maxVal < 1) maxVal = 1;
     axisY->setRange(0, maxVal + maxVal * 0.2);  // Add 20% top padding for labels
     chart->addAxis(axisY, Qt::AlignLeft);
 
@@ -2786,19 +3260,347 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
 }
 
 
+void Defect_Data_Display::updatePlatformByTimeChart()
+{
+    qDebug() << "=== updatePlatformByTimeChart ENTER ===";
+
+    if (!m_chartViewPlatformByTime) {
+        qDebug() << "[EXIT EARLY] m_chartViewPlatformByTime is null";
+        return;
+    }
+    qDebug() << "[CHECK] m_chartViewPlatformByTime is valid";
+
+    QChart* chart = ((QChartView*)m_chartViewPlatformByTime)->chart();
+
+    // Clear old text items from scene
+    if (chart->scene()) {
+        QList<QGraphicsItem*> items = chart->scene()->items();
+        for (QGraphicsItem* item : items) {
+            if (qgraphicsitem_cast<QGraphicsSimpleTextItem*>(item)) {
+                chart->scene()->removeItem(item);
+                delete item;
+            }
+        }
+    }
+
+    chart->removeAllSeries();
+    for (auto axis : chart->axes()) {
+        chart->removeAxis(axis);
+    }
+    qDebug() << "[CLEANUP] Cleared old series and axes";
+
+    QString timeRange = ui.comboTimeRange->currentText();
+    qDebug() << "[DATA] Time range:" << timeRange;
+    qDebug() << "[DATA] m_platformAoiResultData.isEmpty():" << m_platformAoiResultData.isEmpty()
+             << "(size:" << m_platformAoiResultData.size() << ")";
+    qDebug() << "[DATA] m_platformTrendData.isEmpty():" << m_platformTrendData.isEmpty()
+             << "(size:" << m_platformTrendData.size() << ")";
+
+    // AOI result colors for stacked segments (OK=green, NG=red)
+    QList<QColor> resultColors;
+    resultColors << QColor(0, 255, 136) << QColor(255, 80, 80);
+
+    // Get time categories and AOI result categories from the data
+    QStringList timeCategories;
+    QStringList aoiResultCategories;
+
+    if (!m_platformAoiResultData.isEmpty()) {
+        qDebug() << "[DATA BUILD] Using m_platformAoiResultData";
+        // Force OK/NG categories for by-time chart
+        aoiResultCategories = {"OK", "NG"};
+
+        // Collect time categories
+        for (auto it = m_platformAoiResultData.constBegin(); it != m_platformAoiResultData.constEnd(); ++it) {
+            QString label = it.key();
+            if (timeRange == "按小时" && label.contains(" ")) {
+                label = label.split(" ").at(1).left(5);
+            } else if (timeRange == "按天" && label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3) label = parts.at(2);
+            }
+            if (!timeCategories.contains(label)) timeCategories.append(label);
+        }
+        qDebug() << "[DATA BUILD] Collected" << timeCategories.size() << "time categories, "
+                 << aoiResultCategories.size() << "AOI result types (OK/NG)";
+    } else if (!m_platformTrendData.isEmpty()) {
+        qDebug() << "[DATA BUILD] Using m_platformTrendData (fallback - OK/NG from Pass/Fail)";
+        // Fallback: convert Pass/Fail to OK/NG
+        aoiResultCategories = {"OK", "NG"};
+        for (auto it = m_platformTrendData.constBegin(); it != m_platformTrendData.constEnd(); ++it) {
+            QString label = it.key();
+            if (timeRange == "按小时" && label.contains(" ")) {
+                label = label.split(" ").at(1).left(5);
+            } else if (timeRange == "按天" && label.contains("-")) {
+                QStringList parts = label.split("-");
+                if (parts.size() >= 3) label = parts.at(2);
+            }
+            if (!timeCategories.contains(label)) timeCategories.append(label);
+        }
+        qDebug() << "[DATA BUILD] Collected" << timeCategories.size() << "time categories, "
+                 << aoiResultCategories.size() << "AOI result types (Pass/Fail) from m_platformTrendData";
+    } else {
+        qDebug() << "[DATA BUILD] WARNING: BOTH m_platformAoiResultData AND m_platformTrendData are EMPTY!";
+    }
+
+    if (timeCategories.isEmpty()) {
+        qDebug() << "[EXIT EARLY] No time categories available for by-time chart (timeCategories is empty)";
+        return;
+    }
+    qDebug() << "[DATA BUILD] Final timeCategories:" << timeCategories;
+    qDebug() << "[DATA BUILD] Final aoiResultCategories:" << aoiResultCategories;
+
+    // Sort time categories
+    if (timeRange == "按小时" || timeRange == "按天") {
+        std::sort(timeCategories.begin(), timeCategories.end(), [](const QString& a, const QString& b) {
+            return a.toInt() < b.toInt();
+        });
+    }
+    qDebug() << "[DATA BUILD] Sorted timeCategories:" << timeCategories;
+
+    // Store time category mapping for tooltip
+    m_byTimeCategoryMap.clear();
+    qDebug() << "[TOOLTIP] Building category map...";
+    for (const QString& cat : timeCategories) {
+        // Find original key for this category
+        if (!m_platformAoiResultData.isEmpty()) {
+            for (auto it = m_platformAoiResultData.constBegin(); it != m_platformAoiResultData.constEnd(); ++it) {
+                QString label = it.key();
+                if (timeRange == "按小时" && label.contains(" ")) {
+                    if (label.split(" ").at(1).left(5) == cat) { m_byTimeCategoryMap[cat] = it.key(); break; }
+                } else if (timeRange == "按天" && label.contains("-")) {
+                    QStringList parts = label.split("-");
+                    if (parts.size() >= 3 && parts.at(2) == cat) { m_byTimeCategoryMap[cat] = it.key(); break; }
+                } else if (timeRange == "按月" && label == cat) {
+                    m_byTimeCategoryMap[cat] = it.key(); break;
+                }
+            }
+        } else if (!m_platformTrendData.isEmpty()) {
+            for (auto it = m_platformTrendData.constBegin(); it != m_platformTrendData.constEnd(); ++it) {
+                QString label = it.key();
+                if (timeRange == "按小时" && label.contains(" ")) {
+                    if (label.split(" ").at(1).left(5) == cat) { m_byTimeCategoryMap[cat] = it.key(); break; }
+                } else if (timeRange == "按天" && label.contains("-")) {
+                    QStringList parts = label.split("-");
+                    if (parts.size() >= 3 && parts.at(2) == cat) { m_byTimeCategoryMap[cat] = it.key(); break; }
+                } else if (timeRange == "按月" && label == cat) {
+                    m_byTimeCategoryMap[cat] = it.key(); break;
+                }
+            }
+        }
+    }
+    qDebug() << "[TOOLTIP] Category map built, size:" << m_byTimeCategoryMap.size();
+
+    // Create ONE stacked bar series aggregating all platforms
+    // Bar sets represent AOI result types (OK, NG, Rework), each bar set contains values for each time period
+    qDebug() << "[SERIES] Creating stacked bar series...";
+    QStackedBarSeries* stackedSeries = new QStackedBarSeries();
+    stackedSeries->setLabelsVisible(false);
+    stackedSeries->setName("总计");
+
+    // Create bar sets for each AOI result type
+    qDebug() << "[SERIES] Creating" << aoiResultCategories.size() << "bar sets";
+    QList<QBarSet*> barSets;
+    for (int i = 0; i < aoiResultCategories.size() && i < resultColors.size(); ++i) {
+        QBarSet* set = new QBarSet(aoiResultCategories[i]);
+        set->setColor(resultColors[i]);
+        set->setLabelColor(QColor(234, 234, 234));
+        barSets.append(set);
+    }
+
+    // Store totals per time period for label display
+    QList<int> timePeriodTotals(timeCategories.size(), 0);
+    qDebug() << "[SERIES] Created" << barSets.size() << "bar sets, initialized" << timePeriodTotals.size() << "totals to 0";
+
+    // Fill in aggregated data for each time category
+    qDebug() << "[SERIES] Filling aggregated data for" << timeCategories.size() << "time categories...";
+    for (int ti = 0; ti < timeCategories.size(); ++ti) {
+        const QString& timeCat = timeCategories[ti];
+        QString originalKey = m_byTimeCategoryMap.value(timeCat);
+
+        // Aggregate data from all 4 platforms for this time period
+        QMap<QString, int> aggregatedAoiData;
+        qDebug() << "[AGGREGATE] Processing time category:" << timeCat << "originalKey:" << originalKey;
+        for (int p = 0; p < 4; ++p) {
+            if (!m_platformAoiResultData.isEmpty() && !originalKey.isEmpty()) {
+                const QMap<QString, int>& aoiMap = m_platformAoiResultData.value(originalKey).value(p);
+                for (auto ait = aoiMap.constBegin(); ait != aoiMap.constEnd(); ++ait) {
+                    aggregatedAoiData[ait.key()] += ait.value();
+                }
+            }
+        }
+
+        // Fill bar sets with aggregated data
+        for (int i = 0; i < aoiResultCategories.size() && i < barSets.size(); ++i) {
+            int val = aggregatedAoiData.value(aoiResultCategories[i], 0);
+            *barSets[i] << val;
+            timePeriodTotals[ti] += val;
+        }
+        qDebug() << "[AGGREGATE] timePeriodTotals[" << ti << "] =" << timePeriodTotals[ti];
+
+        // Fallback to OK/NG if no AOI result data
+        if (aggregatedAoiData.isEmpty() && !m_platformTrendData.isEmpty() && !originalKey.isEmpty()) {
+            int passTotal = 0, failTotal = 0;
+            for (int p = 0; p < 4; ++p) {
+                if (m_platformTrendData.contains(originalKey) && m_platformTrendData[originalKey].contains(p)) {
+                    QPair<int, int> passFail = m_platformTrendData[originalKey][p];
+                    passTotal += passFail.first;
+                    failTotal += passFail.second;
+                }
+            }
+            // Map to aoiResultCategories (OK, NG)
+            for (int i = 0; i < aoiResultCategories.size() && i < barSets.size(); ++i) {
+                int val = 0;
+                if (aoiResultCategories[i] == "OK") val = passTotal;
+                else if (aoiResultCategories[i] == "NG") val = failTotal;
+                *barSets[i] << val;
+                timePeriodTotals[ti] += val;
+            }
+            qDebug() << "[FALLBACK] OK/NG totals for category" << timeCat << ": OK=" << passTotal << "NG=" << failTotal;
+        }
+    }
+
+    // Add bar sets to series
+    qDebug() << "[SERIES] Adding" << barSets.size() << "bar sets to stacked series";
+    for (QBarSet* bs : barSets) {
+        stackedSeries->append(bs);
+    }
+
+    qDebug() << "[CHART] Adding series to chart";
+    chart->addSeries(stackedSeries);
+
+    // Set up axes
+    qDebug() << "[AXIS] Setting up X axis with" << timeCategories.size() << "categories";
+    QBarCategoryAxis* axisX = new QBarCategoryAxis();
+    axisX->append(timeCategories);
+    axisX->setLabelsColor(QColor(234, 234, 234));
+    QFont axisXFont = axisX->labelsFont();
+    axisXFont.setPointSize(10);
+    axisX->setLabelsFont(axisXFont);
+    chart->addAxis(axisX, Qt::AlignBottom);
+
+    // Calculate max value for Y axis
+    int maxVal = 1;
+    for (int val : timePeriodTotals) {
+        if (val > maxVal) maxVal = val;
+    }
+    qDebug() << "[AXIS] Y axis max value:" << maxVal;
+
+    qDebug() << "[AXIS] Setting up Y axis with range [0," << (maxVal + maxVal * 0.2) << "]";
+    QValueAxis* axisY = new QValueAxis();
+    axisY->setTitleText("Total");
+    axisY->setLabelFormat("%d");
+    axisY->setLabelsColor(QColor(234, 234, 234));
+    QFont axisYFont = axisY->labelsFont();
+    axisYFont.setPointSize(10);
+    axisY->setLabelsFont(axisYFont);
+    axisY->setTitleBrush(QBrush(QColor(0, 217, 255)));
+    axisY->setRange(0, maxVal + maxVal * 0.2);
+    chart->addAxis(axisY, Qt::AlignLeft);
+
+    // Attach axes to the single series
+    qDebug() << "[AXIS] Attaching axes to series";
+    stackedSeries->attachAxis(axisX);
+    stackedSeries->attachAxis(axisY);
+
+    // Set chart title
+    qDebug() << "[CHART] Setting title:" << ("按时间统计 (" + timeRange + ")");
+    chart->setTitle("按时间统计 (" + timeRange + ")");
+
+    // Set up legend
+    qDebug() << "[LEGEND] Configuring legend";
+    chart->legend()->show();
+    chart->legend()->setLabelColor(QColor(234, 234, 234));
+    chart->legend()->setBrush(QBrush(QColor(22, 33, 62, 200)));
+    chart->legend()->setPen(QPen(QColor(60, 80, 100)));
+    QFont legendFont = chart->legend()->font();
+    legendFont.setPointSize(9);
+    chart->legend()->setFont(legendFont);
+    chart->legend()->setAlignment(Qt::AlignTop);
+
+    // Install event filter on the by-time chart for tooltip
+    qDebug() << "[TOOLTIP] Installing event filter";
+    m_chartViewPlatformByTime->setMouseTracking(true);
+    if (!m_chartViewPlatformByTime->property("_eventFilterInstalled").toBool()) {
+        m_chartViewPlatformByTime->installEventFilter(this);
+        m_chartViewPlatformByTime->viewport()->installEventFilter(this);
+        m_chartViewPlatformByTime->setProperty("_eventFilterInstalled", true);
+    }
+
+    // Store time period totals for tooltip
+    m_byTimePlatformTotals.clear();
+    m_byTimePlatformTotals.append(timePeriodTotals);
+
+    // Wait for layout to complete, then add total labels above each bar
+    qDebug() << "[LABELS] Scheduling delayed label update (500ms)";
+    QTimer::singleShot(500, this, [chart, timeCategories, timePeriodTotals, axisY]() {
+        QRectF plotArea = chart->plotArea();
+
+        bool validPlotArea = plotArea.width() > 200 && plotArea.height() > 50;
+        if (!validPlotArea) {
+            qDebug() << "[PlatformByTime] plotArea not valid, skipping labels";
+            return;
+        }
+
+        int numTimeCategories = timeCategories.size();
+        if (numTimeCategories == 0) return;
+
+        // Calculate bar positions for single bar per time category (matching platform tab formula)
+        qreal barGroupWidth = plotArea.width() / numTimeCategories;
+        qreal barWidth = barGroupWidth * 0.6;
+        qreal barLeftMargin = (barGroupWidth - barWidth) / 2;
+
+        qreal yMin = axisY->min();
+        qreal yMax = axisY->max();
+        qreal yRange = yMax - yMin;
+
+        for (int ti = 0; ti < numTimeCategories; ++ti) {
+            if (timePeriodTotals[ti] <= 0) continue;
+
+            // Calculate X position for the bar center (matching platform tab formula)
+            qreal barCenterX = plotArea.left() + barLeftMargin + ti * barGroupWidth + barWidth / 2;
+
+            // Calculate Y position for the top of the stacked bar
+            qreal normalizedValue = (timePeriodTotals[ti] - yMin) / yRange;
+            qreal barTopY = plotArea.bottom() - normalizedValue * plotArea.height();
+
+            // Create text item for total
+            QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(QString::number(timePeriodTotals[ti]));
+            textItem->setFont(QFont("Arial", 9, QFont::Bold));
+            textItem->setBrush(QBrush(QColor(255, 255, 255)));
+            textItem->setZValue(100);
+            chart->scene()->addItem(textItem);
+
+            // Position text centered above the bar
+            qreal textX = barCenterX - textItem->boundingRect().width() / 2;
+            qreal textY = barTopY - textItem->boundingRect().height() - 2;
+            textItem->setPos(textX, textY);
+        }
+        qDebug() << "[LABELS] Added total labels above bars";
+    });
+
+    qDebug() << "=== updatePlatformByTimeChart EXIT (chart update complete) ===";
+}
+
+
 void Defect_Data_Display::onDataLoaded_PlatformAoiResult(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories, const QString& timeRange)
 {
     // Save the data to member variable for tooltip usage
     m_platformAoiResultData = platformAoiResultData;
-    m_aoiResultCategories = aoiResultCategories;
-    qDebug() << "[PlatformAoiResult] Saved" << m_platformAoiResultData.size() << "time periods";
+    // Force OK/NG categories (from SQL reclassification)
+    m_aoiResultCategories = (aoiResultCategories.isEmpty()) ? QStringList{"OK", "NG"} : aoiResultCategories;
+    qDebug() << "[PlatformAoiResult] Saved" << m_platformAoiResultData.size() << "time periods, categories:" << m_aoiResultCategories;
 
-    // Use stacked bar chart to show different AOIResult types
-    if (!platformAoiResultData.isEmpty() && !aoiResultCategories.isEmpty()) {
-        updatePlatformTrendChartStacked(platformAoiResultData, aoiResultCategories);
+    // Use stacked bar chart to show different AOIResult types (OK/NG)
+    if (!platformAoiResultData.isEmpty() && !m_aoiResultCategories.isEmpty()) {
+        updatePlatformTrendChartStacked(platformAoiResultData, m_aoiResultCategories);
     } else if (!m_platformTrendData.isEmpty()) {
         // Fallback to non-stacked chart if no AOIResult detail
         updatePlatformTrendChart(m_platformTrendData);
+    }
+
+    // If user is on the by-time tab, also update the by-time chart
+    if (ui.tabPlatformPages->currentIndex() == 0 && m_chartViewPlatformByTime) {
+        updatePlatformByTimeChart();
     }
 }
 
@@ -2932,14 +3734,19 @@ void Defect_Data_Display::updateInspectionTrendChart(const QMap<QString, QPair<i
     QString timeRange = ui.comboTimeRange->currentText();
     QStringList timeCategories;
 
-    // Pass chart
+    // Pass chart (hidden tab) - if not initialized, skip this function
+    if (!m_chartViewInspectionPass || !m_chartViewInspectionFail) {
+        qDebug() << "Inspection charts not initialized, skipping update";
+        return;
+    }
+
     QChart* passChart = ((QChartView*)m_chartViewInspectionPass)->chart();
     passChart->removeAllSeries();
     for (auto axis : passChart->axes()) {
         passChart->removeAxis(axis);
     }
 
-    // Fail chart
+    // Fail chart (hidden tab)
     QChart* failChart = ((QChartView*)m_chartViewInspectionFail)->chart();
     failChart->removeAllSeries();
     for (auto axis : failChart->axes()) {
@@ -3197,14 +4004,17 @@ void DataLoaderThread::run()
         qDebug() << "Inspection trend query failed:" << inspectionTrendQ.lastError().text();
     }
 
-    // Query 1b: Platform AOIResult detail by time period (per platform, per AOIResult)
-    qDebug() << "Querying platform AOIResult detail...";
+    // Query 1b: Platform AOIResult detail by time period (per platform, per Grade_AOI)
+    // Reclassify: R1 -> NG, all other values -> OK
+    qDebug() << "Querying platform Grade_AOI detail...";
     QString platformAoiResultQuery = QString(R"(
-        SELECT %1 as time_period, PlatformID, AOIResult, COUNT(*) as cnt
+        SELECT %1 as time_period, PlatformID,
+               CASE WHEN Grade_AOI = 'R1' THEN 'NG' ELSE 'OK' END as grade_class,
+               COUNT(*) as cnt
         FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
         WHERE %2
-        GROUP BY time_period, PlatformID, AOIResult
-        ORDER BY time_period, PlatformID, AOIResult
+        GROUP BY time_period, PlatformID, grade_class
+        ORDER BY time_period, PlatformID, grade_class
     )").arg(timeFormat).arg(queryCondition);
 
     QSqlQuery platformAoiResultQ(db);
@@ -3216,15 +4026,44 @@ void DataLoaderThread::run()
         while (platformAoiResultQ.next()) {
             QString period = platformAoiResultQ.value(0).toString();
             int platformId = platformAoiResultQ.value(1).toInt();
-            QString aoiResult = platformAoiResultQ.value(2).toString();
+            QString gradeClass = platformAoiResultQ.value(2).toString();
             int cnt = platformAoiResultQ.value(3).toInt();
-            platformAoiResultData[period][platformId][aoiResult] = cnt;
-            if (!aoiResultCategories.contains(aoiResult)) {
-                aoiResultCategories.append(aoiResult);
+            platformAoiResultData[period][platformId][gradeClass] = cnt;
+            if (!aoiResultCategories.contains(gradeClass)) {
+                aoiResultCategories.append(gradeClass);
             }
         }
     } else {
-        qDebug() << "Platform AOIResult query failed:" << platformAoiResultQ.lastError().text();
+        qDebug() << "Platform Grade_AOI query failed:" << platformAoiResultQ.lastError().text();
+    }
+
+    // Query 3: Platform trend by Grade_AOI (for line chart by grade type)
+    qDebug() << "Querying platform Grade_AOI trend...";
+    QStringList allGrades;
+    QMap<QString, QMap<QString, int>> platformGradeTrendData;
+    QString gradeTrendQuery = QString(R"(
+        SELECT %1 as time_period, Grade_AOI, COUNT(*) as cnt
+        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        WHERE %2
+        GROUP BY time_period, Grade_AOI
+        ORDER BY time_period, Grade_AOI
+    )").arg(timeFormat).arg(queryCondition);
+    qDebug() << "[Chart] Grade trend query:" << gradeTrendQuery;
+    QSqlQuery gradeQuery(db);
+    gradeQuery.setForwardOnly(true);
+    if (gradeQuery.exec(gradeTrendQuery)) {
+        while (gradeQuery.next()) {
+            QString timePeriod = gradeQuery.value(0).toString();
+            QString grade = gradeQuery.value(1).toString();
+            int cnt = gradeQuery.value(2).toInt();
+            platformGradeTrendData[timePeriod][grade] = cnt;
+            if (!allGrades.contains(grade)) {
+                allGrades.append(grade);
+            }
+        }
+        qDebug() << "[Chart] Grade trend data loaded:" << platformGradeTrendData.size() << "time periods, grades:" << allGrades;
+    } else {
+        qDebug() << "[Chart] Grade trend query failed:" << gradeQuery.lastError().text();
     }
 
     // Emit trend data signals
@@ -3232,6 +4071,7 @@ void DataLoaderThread::run()
     emit platformAoiResultLoaded(platformAoiResultData, aoiResultCategories, m_timeRange);
     emit defectTrendLoaded(defectTrendData, m_timeRange);
     emit inspectionTrendLoaded(inspectionTrendData, m_timeRange);
+    emit platformGradeTrendLoaded(platformGradeTrendData, allGrades, m_timeRange);
 
     // Original combined query for totals
     qDebug() << "Executing combined optimized query for totals...";
@@ -3539,12 +4379,15 @@ void TabDataLoaderThread::run()
         }
     }
     else if (m_tabIndex == 5) {
+        // Query raw Grade_AOI values (R1, R2, R3, etc.)
         QString queryStr = QString(R"(
-            SELECT Code_AOI, Grade_AOI, COUNT(*) as cnt
+            SELECT 
+                Grade_AOI as grade_result,
+                COUNT(*) as cnt
             FROM ivs_lcd_inspectionresult
             WHERE %1
-            GROUP BY Code_AOI, Grade_AOI
-            ORDER BY Code_AOI, Grade_AOI
+            GROUP BY grade_result
+            ORDER BY grade_result
         )").arg(m_dateRange);
 
         QSqlQuery query(db);
@@ -3556,9 +4399,8 @@ void TabDataLoaderThread::run()
 
             while (query.next()) {
                 QVariantList row;
-                row.append(query.value(0).toString());
-                row.append(query.value(1).toString());
-                row.append(query.value(2).toInt());
+                row.append(query.value(0).toString());  // grade_result (R1, R2, R3, etc.)
+                row.append(query.value(1).toInt());     // count
                 defectDetails.append(row);
             }
             emit detailDataLoaded(defectDetails);
@@ -4030,7 +4872,7 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
     // Create new dialog
     m_barClickDialog = new QDialog(this);
     m_barClickDialog->setModal(true);
-    m_barClickDialog->resize(900, 600);
+    m_barClickDialog->resize(1200, 800);
 
     qDebug() << "[BarClickDialog] platformIdx:" << platformIdx << "timeKey:" << timeKey;
 
@@ -4094,7 +4936,12 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
         }
     )");
 
+    tableWidget->setMinimumHeight(550);
+    tableWidget->verticalHeader()->setDefaultSectionSize(22);
+    tableWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+
     mainLayout->addWidget(tableWidget);
+    mainLayout->setStretchFactor(tableWidget, 10);  // Table gets 10x stretch
 
     // Pagination controls
     QHBoxLayout* pageLayout = new QHBoxLayout();
@@ -4152,6 +4999,7 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
     pageLayout->addStretch();
 
     mainLayout->addLayout(pageLayout);
+    mainLayout->setStretchFactor(pageLayout, 1);  // Pagination gets 1x stretch
 
     // Pagination state
     int currentPage = 1;
@@ -4469,5 +5317,122 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
 
     // Show dialog
     m_barClickDialog->exec();
+}
+
+void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
+{
+    // Create new dialog
+    QDialog dialog(this);
+    dialog.setModal(true);
+    dialog.resize(1200, 800);
+    dialog.setWindowTitle(QString("等级类型: %1").arg(gradeName));
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
+    mainLayout->setContentsMargins(15, 15, 15, 15);
+    mainLayout->setSpacing(10);
+
+    // Table widget
+    QTableWidget* tableWidget = new QTableWidget(&dialog);
+    tableWidget->setColumnCount(6);
+    tableWidget->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
+    tableWidget->setAlternatingRowColors(true);
+    tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
+    tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    tableWidget->horizontalHeader()->setStretchLastSection(true);
+    tableWidget->verticalHeader()->setVisible(false);
+    tableWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    tableWidget->setMinimumHeight(600);
+    tableWidget->verticalHeader()->setDefaultSectionSize(22);
+
+    // Table styling (reuse same style)
+    tableWidget->setStyleSheet(R"(
+        QTableWidget {
+            background-color: rgba(20, 35, 55, 220);
+            alternate-background-color: rgba(30, 50, 80, 180);
+            color: #e0f0ff;
+            border: 1px solid rgba(0, 217, 255, 80);
+            border-radius: 6px;
+            gridline-color: rgba(0, 217, 255, 40);
+            font-size: 13px;
+        }
+        QTableWidget::item { padding: 5px; }
+        QTableWidget::item:selected { background-color: rgba(0, 150, 200, 150); color: #ffffff; }
+        QHeaderView::section {
+            background-color: rgba(0, 100, 150, 180);
+            color: #ffffff; padding: 6px;
+            border: 1px solid rgba(0, 217, 255, 60);
+            font-weight: bold; font-size: 13px;
+        }
+    )");
+
+    mainLayout->addWidget(tableWidget);
+
+    // Close button
+    QPushButton* closeBtn = new QPushButton("关闭", &dialog);
+    closeBtn->setFixedWidth(100);
+    closeBtn->setStyleSheet(R"(
+        QPushButton {
+            background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,120,170,180), stop:1 rgba(0,80,130,180));
+            color: #ffffff; border: 1px solid rgba(0,217,255,100);
+            border-radius: 6px; padding: 8px 20px; font-size: 13px; font-weight: bold;
+        }
+        QPushButton:hover { background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,160,220,220), stop:1 rgba(0,110,170,220)); border: 1px solid #00d9ff; }
+    )");
+    QHBoxLayout* btnLayout = new QHBoxLayout();
+    btnLayout->addStretch();
+    btnLayout->addWidget(closeBtn);
+    mainLayout->addLayout(btnLayout);
+
+    QObject::connect(closeBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
+
+    // Load data for this grade type
+    QString connectionName = QString("gradetype_%1").arg(QDateTime::currentMSecsSinceEpoch());
+    QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", connectionName);
+    QString connStr = "DRIVER={MySQL ODBC 5.3 ANSI Driver};SERVER=localhost;PORT=3306;DATABASE=ivs_lcd;UID=root;PWD=123456;OPTION=8;";
+    db.setDatabaseName(connStr);
+
+    if (!db.open()) {
+        QMessageBox::warning(&dialog, "错误", "数据库连接失败");
+        return;
+    }
+
+    // Query based on time range
+    QString timeRange = ui.comboTimeRange->currentText();
+    QDate selectedDate = m_selectedDate;
+    QString dateStr = selectedDate.toString("yyyy-MM-dd");
+
+    QString queryStr;
+    if (timeRange == "按小时") {
+        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE(StartTime) = '%2' ORDER BY StartTime DESC LIMIT 500")
+            .arg(gradeName).arg(dateStr);
+    } else if (timeRange == "按天") {
+        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE(StartTime) = '%2' ORDER BY StartTime DESC LIMIT 500")
+            .arg(gradeName).arg(dateStr);
+    } else if (timeRange == "按月") {
+        QString monthStr = dateStr.left(7);
+        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE_FORMAT(StartTime, '%Y-%m') = '%2' ORDER BY StartTime DESC LIMIT 500")
+            .arg(gradeName).arg(monthStr);
+    } else {
+        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' ORDER BY StartTime DESC LIMIT 500")
+            .arg(gradeName);
+    }
+
+    QSqlQuery query(db);
+    if (query.exec(queryStr)) {
+        tableWidget->setRowCount(0);
+        while (query.next()) {
+            int row = tableWidget->rowCount();
+            tableWidget->insertRow(row);
+            for (int col = 0; col < 6; ++col) {
+                tableWidget->setItem(row, col, new QTableWidgetItem(query.value(col).toString()));
+            }
+        }
+    } else {
+        QMessageBox::warning(&dialog, "错误", "查询失败: " + query.lastError().text());
+    }
+
+    QSqlDatabase::removeDatabase(connectionName);
+
+    dialog.exec();
 }
 

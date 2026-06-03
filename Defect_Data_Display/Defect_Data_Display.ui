@@ -884,6 +884,26 @@ QTabBar::tab:hover {
           <property name="currentIndex">
            <number>0</number>
           </property>
+          <widget class="QWidget" name="chartPlatformPage0">
+           <attribute name="title">
+            <string>按时间</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="tabPlatformPage0Layout">
+            <item>
+             <widget class="QWidget" name="chartPlatformByTime" native="true">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>600</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #16213e; border-radius: 8px;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
           <widget class="QWidget" name="chartPlatformPage1">
            <attribute name="title">
             <string>工位一</string>
@@ -968,7 +988,8 @@ QTabBar::tab:hover {
         </item>
        </layout>
       </widget>
-      <widget class="QWidget" name="tabDefect">
+      <!-- Hidden: tabDefect -->
+      <!-- <widget class="QWidget" name="tabDefect">
        <attribute name="title">
         <string>缺陷分析</string>
        </attribute>
@@ -987,8 +1008,9 @@ QTabBar::tab:hover {
          </widget>
         </item>
        </layout>
-      </widget>
-      <widget class="QWidget" name="tabInspection">
+      </widget> -->
+      <!-- Hidden: tabInspection -->
+      <!-- <widget class="QWidget" name="tabInspection">
        <attribute name="title">
         <string>检测结果</string>
        </attribute>
@@ -1023,8 +1045,9 @@ QTabBar::tab:hover {
          </widget>
         </item>
        </layout>
-      </widget>
-      <widget class="QWidget" name="tabMapping">
+      </widget> -->
+      <!-- Hidden: tabMapping -->
+      <!-- <widget class="QWidget" name="tabMapping">
        <attribute name="title">
         <string>缺陷位置映射</string>
        </attribute>
@@ -1043,7 +1066,7 @@ QTabBar::tab:hover {
          </widget>
         </item>
        </layout>
-      </widget>
+      </widget> -->
       <widget class="QWidget" name="tabTrend">
        <attribute name="title">
         <string>趋势分析</string>

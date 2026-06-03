@@ -60,6 +60,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
     void showPlatformChartTooltip(QChartView* chartView, int platformIdx, const QPoint& viewportPos, const QPointF& chartPos);
+    void showByTimeChartTooltip(const QPoint& viewportPos, const QPointF& chartPos);
 
 private slots:
     void onRefreshClicked();
@@ -88,6 +89,7 @@ private slots:
     void onDataLoaded_PlatformAoiResult(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories, const QString& timeRange);
     void onDataLoaded_DefectTrend(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange);
     void onDataLoaded_InspectionTrend(const QMap<QString, QPair<int, int>>& inspectionTrendData, const QString& timeRange);
+    void onDataLoaded_PlatformGradeTrend(const QMap<QString, QMap<QString, int>>& gradeTrendData, const QStringList& allGrades, const QString& timeRange);
 
 private:
     Ui::Defect_Data_DisplayClass ui;
@@ -103,6 +105,7 @@ private:
     QChartView* m_chartViewPlatform1;
     QChartView* m_chartViewPlatform2;
     QChartView* m_chartViewPlatform3;
+    QChartView* m_chartViewPlatformByTime;
     void* m_chartViewDetail;
     void* m_chartViewPieDetail;
     void* m_chartViewLocationAbnormal;
@@ -125,8 +128,8 @@ private:
     CachedTabData m_trendCache;
     CachedTabData m_detailCache;
     qint64 m_lastMainLoadTime;
-    static constexpr int TAB_SEARCH = 6;
-    static constexpr int TAB_LOCATION_ABNORMAL = 7;
+    static constexpr int TAB_SEARCH = 3;
+    static constexpr int TAB_LOCATION_ABNORMAL = 4;
     QString m_searchScreenId;  // ScreenID for search filtering
 
     // New member variables for time-based trend data
@@ -136,6 +139,11 @@ private:
     QMap<QString, QPair<int, int>> m_inspectionTrendData;            // time_period -> (pass, fail)
     QString m_currentTimeFormat;  // Current time format for display
     QStringList m_aoiResultCategories;  // AOIResult categories for stacked chart (e.g., "OK", "NG", "Rework")
+    QMap<QString, QMap<QString, int>> m_platformGradeTrendData;  // time_period -> grade -> count
+
+    // Member variables for by-time chart tooltip support
+    QMap<QString, QString> m_byTimeCategoryMap;  // Display category -> original key
+    QList<QList<int>> m_byTimePlatformTotals;  // Platform totals for tooltip
 
     bool connectToDatabase();
     void startLoading(const QString& timeRange);
@@ -165,6 +173,8 @@ private:
     void updatePlatformTrendChartStacked(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories);
     void updateDefectTrendChart(const QMap<QString, QMap<QString, int>>& defectTrendData);
     void updateInspectionTrendChart(const QMap<QString, QPair<int, int>>& inspectionTrendData);
+    void updatePlatformGradeTrendChart(const QMap<QString, QMap<QString, int>>& gradeTrendData, const QStringList& allGrades, const QString& timeRange);
+    void updatePlatformByTimeChart();
     void loadMainData(const QString& timeRange);
 
     // Location Abnormal functions
@@ -174,6 +184,7 @@ private:
     void onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void showBarClickDialog(int platformIdx, const QString& timeKey);
     void showDetailPieDialog();
+    void showGradeTypeDialog(const QString& gradeName);
     QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count
     CachedTabData m_locationAbnormalCache;
     QLabel* m_tooltipLabel;  // custom floating tooltip for platform charts
@@ -208,6 +219,7 @@ signals:
     void platformAoiResultLoaded(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories, const QString& timeRange);
     void defectTrendLoaded(const QMap<QString, QMap<QString, int>>& defectTrendData, const QString& timeRange);
     void inspectionTrendLoaded(const QMap<QString, QPair<int, int>>& inspectionTrendData, const QString& timeRange);
+    void platformGradeTrendLoaded(const QMap<QString, QMap<QString, int>>& gradeTrendData, const QStringList& allGrades, const QString& timeRange);
 
 protected:
     int m_loadId;
