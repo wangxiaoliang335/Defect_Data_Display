@@ -445,7 +445,6 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
 
             QChartView* pieView = static_cast<QChartView*>(m_chartViewPieDetail);
             if (pieView && (pieView == watched || pieView->viewport() == watched)) {
-                showDetailPieDialog();
                 return true;
             }
 
@@ -599,23 +598,25 @@ void Defect_Data_Display::showDetailPieDialog()
     subtitleLabel->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(subtitleLabel, 0);
 
-    // Content layout: mini pie chart + stats on left, table on right
+    // Content layout: pie chart on left, all controls on right
     QHBoxLayout* contentLayout = new QHBoxLayout();
-    contentLayout->setSpacing(15);
+    contentLayout->setSpacing(20);
 
-    // Left side: mini pie chart + stats
+    // Left side: pie chart only
     QVBoxLayout* leftLayout = new QVBoxLayout();
     leftLayout->setSpacing(10);
 
     // Mini pie chart frame
     QFrame* chartFrame = new QFrame(&dialog);
     chartFrame->setObjectName("chartFrame");
-    chartFrame->setFixedHeight(180);
+    chartFrame->setFixedWidth(320);
+    chartFrame->setMinimumHeight(320);
     QVBoxLayout* chartLayout = new QVBoxLayout(chartFrame);
-    chartLayout->setContentsMargins(5, 5, 5, 5);
+    chartLayout->setContentsMargins(10, 10, 10, 10);
+    chartLayout->setSpacing(10);
 
     QLabel* chartTitle = new QLabel("分布图", chartFrame);
-    chartTitle->setStyleSheet("color: #00d9ff; font-size: 12px; font-weight: bold;");
+    chartTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
     chartTitle->setAlignment(Qt::AlignCenter);
     chartLayout->addWidget(chartTitle);
 
@@ -640,10 +641,16 @@ void Defect_Data_Display::showDetailPieDialog()
     QChartView* miniChartView = new QChartView(miniChart);
     miniChartView->setRenderHint(QPainter::Antialiasing);
     miniChartView->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
-    miniChartView->setFixedHeight(140);
-    chartLayout->addWidget(miniChartView);
+    miniChartView->setMinimumSize(280, 260);
+    chartLayout->addWidget(miniChartView, 1);
 
     leftLayout->addWidget(chartFrame);
+    leftLayout->addStretch(1);
+    contentLayout->addLayout(leftLayout, 1);
+
+    // Right side: stats + data table
+    QVBoxLayout* rightLayout = new QVBoxLayout();
+    rightLayout->setSpacing(12);
 
     // Stats cards
     QHBoxLayout* statsLayout = new QHBoxLayout();
@@ -679,16 +686,10 @@ void Defect_Data_Display::showDetailPieDialog()
     typeCardLayout->addWidget(typeValue);
     statsLayout->addWidget(typeCard);
 
-    leftLayout->addLayout(statsLayout);
-    leftLayout->addStretch(1);
-    contentLayout->addLayout(leftLayout, 1);
-
-    // Right side: data table
-    QVBoxLayout* rightLayout = new QVBoxLayout();
+    rightLayout->addLayout(statsLayout);
 
     QLabel* tableTitle = new QLabel("详细数据", &dialog);
     tableTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
-    // 加这一行，高度改成你想要的像素
     tableTitle->setFixedHeight(20);
     rightLayout->addWidget(tableTitle);
     //rightLayout->addWidget(table, 1);
@@ -3269,6 +3270,20 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
 
     qDebug() << "Step 3: Creating pie series with Grade_AOI colors";
 
+    // Sort grades for consistent display: OK first, then R1-R5, then others alphabetically
+    QStringList sortedGrades = gradeCount.keys();
+    std::sort(sortedGrades.begin(), sortedGrades.end(), [](const QString& a, const QString& b) {
+        if (a == "OK") return true;
+        if (b == "OK") return false;
+        if (a.startsWith("R") && b.startsWith("R")) {
+            bool aOk, bOk;
+            int aNum = a.mid(1).toInt(&aOk);
+            int bNum = b.mid(1).toInt(&bOk);
+            if (aOk && bOk) return aNum < bNum;
+        }
+        return a < b;
+    });
+
     QPieSeries* pieSeries = new QPieSeries();
     pieSeries->setLabelsVisible(true);
 
@@ -3305,25 +3320,170 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     QChartView* newPieChartView = new QChartView(pieChart);
     newPieChartView->setRenderHint(QPainter::Antialiasing);
     newPieChartView->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
-    newPieChartView->setCursor(Qt::PointingHandCursor);
-    newPieChartView->installEventFilter(this);
-    newPieChartView->viewport()->installEventFilter(this);
+    newPieChartView->setCursor(Qt::ArrowCursor);
 
-    qDebug() << "Step 6: Adding pie chart to layout";
+    qDebug() << "Step 6: Building inline detail panel";
 
-    // Only create layout if one doesn't exist
-    if (ui.chartPieDetail->layout() == nullptr) {
-        QVBoxLayout* layoutPie = new QVBoxLayout(ui.chartPieDetail);
-        layoutPie->setContentsMargins(0, 0, 0, 0);
-    }
-    if (ui.chartPieDetail->layout() != nullptr) {
-        ui.chartPieDetail->layout()->addWidget(newPieChartView);
+    while (QLayout* oldLayout = ui.chartPieDetail->layout()) {
+        QLayoutItem* item;
+        while ((item = oldLayout->takeAt(0)) != nullptr) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+        delete oldLayout;
     }
 
-    // Schedule old chart view for deletion using deleteLater to avoid Qt internal access issues
-    if (m_chartViewPieDetail) {
-        ((QWidget*)m_chartViewPieDetail)->deleteLater();
+    QHBoxLayout* detailLayout = new QHBoxLayout(ui.chartPieDetail);
+    detailLayout->setContentsMargins(12, 12, 12, 12);
+    detailLayout->setSpacing(16);
+
+    QFrame* pieFrame = new QFrame(ui.chartPieDetail);
+    pieFrame->setObjectName("chartFrame");
+    pieFrame->setFixedWidth(340);
+    QVBoxLayout* pieFrameLayout = new QVBoxLayout(pieFrame);
+    pieFrameLayout->setContentsMargins(10, 10, 10, 10);
+    pieFrameLayout->setSpacing(10);
+
+    QLabel* pieTitleLabel = new QLabel(m_detailPieTitle.isEmpty() ? "缺陷类型分布" : m_detailPieTitle, pieFrame);
+    pieTitleLabel->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
+    pieTitleLabel->setAlignment(Qt::AlignCenter);
+    pieFrameLayout->addWidget(pieTitleLabel);
+    newPieChartView->setMinimumSize(300, 320);
+    pieFrameLayout->addWidget(newPieChartView, 1);
+    detailLayout->addWidget(pieFrame, 1);
+
+    QFrame* infoFrame = new QFrame(ui.chartPieDetail);
+    infoFrame->setObjectName("chartFrame");
+    QVBoxLayout* infoLayout = new QVBoxLayout(infoFrame);
+    infoLayout->setContentsMargins(10, 10, 10, 10);
+    infoLayout->setSpacing(12);
+
+    QHBoxLayout* statsLayout = new QHBoxLayout();
+    statsLayout->setSpacing(10);
+
+    int inlineTotal = 0;
+    for (auto it = gradeCount.constBegin(); it != gradeCount.constEnd(); ++it) {
+        inlineTotal += it.value();
     }
+
+    QFrame* totalCard = new QFrame(infoFrame);
+    totalCard->setObjectName("statCard");
+    QVBoxLayout* totalCardLayout = new QVBoxLayout(totalCard);
+    totalCardLayout->setContentsMargins(8, 8, 8, 8);
+    QLabel* totalTitle = new QLabel("总数", totalCard);
+    totalTitle->setStyleSheet("color: #8892b0; font-size: 11px;");
+    totalTitle->setAlignment(Qt::AlignCenter);
+    QLabel* totalValue = new QLabel(QString::number(inlineTotal), totalCard);
+    totalValue->setStyleSheet("color: #00d9ff; font-size: 22px; font-weight: bold;");
+    totalValue->setAlignment(Qt::AlignCenter);
+    totalCardLayout->addWidget(totalTitle);
+    totalCardLayout->addWidget(totalValue);
+    statsLayout->addWidget(totalCard);
+
+    QFrame* typeCard = new QFrame(infoFrame);
+    typeCard->setObjectName("statCard");
+    QVBoxLayout* typeCardLayout = new QVBoxLayout(typeCard);
+    typeCardLayout->setContentsMargins(8, 8, 8, 8);
+    QLabel* typeTitle = new QLabel("类型数", typeCard);
+    typeTitle->setStyleSheet("color: #8892b0; font-size: 11px;");
+    typeTitle->setAlignment(Qt::AlignCenter);
+    QLabel* typeValue = new QLabel(QString::number(gradeCount.size()), typeCard);
+    typeValue->setStyleSheet("color: #ff6b6b; font-size: 22px; font-weight: bold;");
+    typeValue->setAlignment(Qt::AlignCenter);
+    typeCardLayout->addWidget(typeTitle);
+    typeCardLayout->addWidget(typeValue);
+    statsLayout->addWidget(typeCard);
+
+    infoLayout->addLayout(statsLayout);
+
+    QLabel* tableTitle = new QLabel("详细数据", infoFrame);
+    tableTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
+    infoLayout->addWidget(tableTitle);
+
+    QTableWidget* detailTable = new QTableWidget(infoFrame);
+    detailTable->setColumnCount(4);
+    detailTable->setHorizontalHeaderLabels({"缺陷类型", "数量", "比例", "占比"});
+    detailTable->setRowCount(sortedGrades.size());
+    detailTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    detailTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    detailTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    detailTable->setAlternatingRowColors(false);
+    detailTable->horizontalHeader()->setStretchLastSection(true);
+    detailTable->verticalHeader()->setVisible(false);
+    detailTable->setShowGrid(false);
+    detailTable->verticalHeader()->setDefaultSectionSize(36);
+    detailTable->setStyleSheet(R"(
+        QTableWidget {
+            background-color: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 5px;
+            gridline-color: #0f3460;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+        QTableWidget::item {
+            padding: 8px 12px;
+            border-bottom: 1px solid #0f3460;
+        }
+        QTableWidget::item:selected {
+            background-color: #0f3460;
+            color: #00d9ff;
+        }
+        QHeaderView::section {
+            background-color: #0f3460;
+            color: #00d9ff;
+            font-weight: bold;
+            font-size: 13px;
+            padding: 10px;
+            border: none;
+            border-bottom: 2px solid #00d9ff;
+        }
+    )");
+
+    for (int row = 0; row < sortedGrades.size(); ++row) {
+        const QString& grade = sortedGrades[row];
+        const int count = gradeCount.value(grade, 0);
+        const double ratio = inlineTotal > 0 ? static_cast<double>(count) / static_cast<double>(inlineTotal) : 0.0;
+        QColor color = gradeColors.contains(grade) ? gradeColors[grade] : otherColors[row % otherColors.size()];
+
+        QTableWidgetItem* nameItem = new QTableWidgetItem("● " + grade);
+        nameItem->setForeground(QBrush(color));
+        nameItem->setFont(QFont("Microsoft YaHei", 12, QFont::Bold));
+        detailTable->setItem(row, 0, nameItem);
+
+        QTableWidgetItem* countItem = new QTableWidgetItem(QString::number(count));
+        countItem->setFont(QFont("Microsoft YaHei", 12));
+        countItem->setForeground(QBrush(QColor("#e0e0e0")));
+        countItem->setTextAlignment(Qt::AlignCenter);
+        detailTable->setItem(row, 1, countItem);
+
+        QTableWidgetItem* ratioItem = new QTableWidgetItem(QString::number(ratio, 'f', 4));
+        ratioItem->setFont(QFont("Microsoft YaHei", 12));
+        ratioItem->setForeground(QBrush(QColor("#e0e0e0")));
+        ratioItem->setTextAlignment(Qt::AlignCenter);
+        detailTable->setItem(row, 2, ratioItem);
+
+        QTableWidgetItem* percentItem = new QTableWidgetItem(QString::number(ratio * 100.0, 'f', 1) + "%");
+        percentItem->setFont(QFont("Microsoft YaHei", 12, QFont::Bold));
+        percentItem->setForeground(QBrush(color));
+        percentItem->setTextAlignment(Qt::AlignCenter);
+        detailTable->setItem(row, 3, percentItem);
+    }
+
+    detailTable->setColumnWidth(0, 220);
+    detailTable->setColumnWidth(1, 120);
+    detailTable->setColumnWidth(2, 120);
+    QObject::connect(detailTable, &QTableWidget::cellClicked, this, [=](int row, int /*column*/) {
+        if (row >= 0 && row < sortedGrades.size()) {
+            showGradeTypeDialog(sortedGrades[row]);
+        }
+    });
+    infoLayout->addWidget(detailTable, 1);
+    detailLayout->addWidget(infoFrame, 2);
+
     m_chartViewPieDetail = newPieChartView;
 
     qDebug() << "Step 7: Creating bar series for Grade_AOI types";
@@ -3332,20 +3492,6 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     QBarSeries* series = new QBarSeries();
     series->setLabelsVisible(true);
     series->setLabelsFormat("@value");
-
-    // Sort grades for consistent display: OK first, then R1-R5, then others alphabetically
-    QStringList sortedGrades = gradeCount.keys();
-    std::sort(sortedGrades.begin(), sortedGrades.end(), [](const QString& a, const QString& b) {
-        if (a == "OK") return true;
-        if (b == "OK") return false;
-        if (a.startsWith("R") && b.startsWith("R")) {
-            bool aOk, bOk;
-            int aNum = a.mid(1).toInt(&aOk);
-            int bNum = b.mid(1).toInt(&bOk);
-            if (aOk && bOk) return aNum < bNum;
-        }
-        return a < b;
-    });
 
     // Create ONE BarSet containing all grade counts
     QBarSet* barSet = new QBarSet("Grade Counts");
