@@ -2336,10 +2336,8 @@ void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap
     }
 
     chart->addSeries(barSeries);
-    barSeries->setLabelsVisible(true);
-    barSeries->setLabelsPosition(QAbstractBarSeries::LabelsOutsideEnd);
-    barSeries->setLabelsFormat("@value");
-    barSeries->setLabelsAngle(0);
+    barSeries->setLabelsVisible(false);
+    barSeries->setBarWidth(1.0);
 
     // Set chart title and style
     chart->setTitle("Grade_AOI 趋势分析 (" + timeRange + ")");
