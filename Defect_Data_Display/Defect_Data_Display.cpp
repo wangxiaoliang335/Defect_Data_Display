@@ -2304,29 +2304,41 @@ void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap
         axis->deleteLater();
     }
 
-    // Create one line series per grade type
+    // Create one bar set per grade type
+    QBarSeries* barSeries = new QBarSeries();
     int colorIdx = 0;
+    int maxVal = 0;
     for (const QString& grade : sortedGrades) {
-        QLineSeries* series = new QLineSeries();
-        series->setName(grade);
+        QBarSet* barSet = new QBarSet(grade);
 
-        // Get color
+        QColor seriesColor;
         if (gradeColors.contains(grade)) {
-            series->setColor(gradeColors[grade]);
+            seriesColor = gradeColors[grade];
         } else {
-            series->setColor(otherColors[colorIdx % otherColors.size()]);
+            seriesColor = otherColors[colorIdx % otherColors.size()];
             colorIdx++;
         }
+        barSet->setColor(seriesColor);
+        barSet->setBorderColor(seriesColor.darker(130));
+        barSet->setLabelColor(QColor(234, 234, 234));
 
-        // Populate data points
         for (int i = 0; i < sortedTimes.size(); ++i) {
             QString timeKey = sortedTimes[i];
             int count = gradeTrendData[timeKey].value(grade, 0);
-            series->append(i, count);
+            *barSet << count;
+            if (count > maxVal) {
+                maxVal = count;
+            }
         }
 
-        chart->addSeries(series);
+        barSeries->append(barSet);
     }
+
+    chart->addSeries(barSeries);
+    barSeries->setLabelsVisible(true);
+    barSeries->setLabelsPosition(QAbstractBarSeries::LabelsOutsideEnd);
+    barSeries->setLabelsFormat("@value");
+    barSeries->setLabelsAngle(0);
 
     // Set chart title and style
     chart->setTitle("Grade_AOI 趋势分析 (" + timeRange + ")");
@@ -2365,16 +2377,6 @@ void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap
     }
     qDebug() << "[GradeTrend] attached axes to series:" << chart->series().size();
 
-    // Find max value for Y axis range
-    int maxVal = 0;
-    for (auto series : chart->series()) {
-        QLineSeries* ls = qobject_cast<QLineSeries*>(series);
-        if (ls) {
-            for (const QPointF& point : ls->points()) {
-                if (point.y() > maxVal) maxVal = point.y();
-            }
-        }
-    }
     if (maxVal < 1) maxVal = 1;
     axisY->setRange(0, maxVal + maxVal * 0.2);
 
