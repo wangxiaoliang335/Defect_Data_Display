@@ -367,6 +367,42 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
     } else if (event->type() == QEvent::MouseButtonPress) {
         QMouseEvent* me = static_cast<QMouseEvent*>(event);
         if (me->button() == Qt::LeftButton) {
+            if (m_chartViewPlatformByTime && (m_chartViewPlatformByTime == watched || m_chartViewPlatformByTime->viewport() == watched)) {
+                QChart* chart = m_chartViewPlatformByTime->chart();
+                QList<QAbstractSeries*> seriesList = chart->series();
+                if (!seriesList.isEmpty()) {
+                    QAbstractBarSeries* barSeries = qobject_cast<QAbstractBarSeries*>(seriesList.first());
+                    if (barSeries) {
+                        QRectF plotArea = chart->plotArea();
+                        qreal relX = (me->pos().x() - plotArea.left()) / plotArea.width();
+
+                        QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
+                        if (!axesX.isEmpty()) {
+                            QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
+                            if (axisX) {
+                                QStringList categories = axisX->categories();
+                                if (!categories.isEmpty()) {
+                                    int numCategories = categories.size();
+                                    int numBarSets = barSeries->count();
+                                    int totalBars = numCategories * numBarSets;
+                                    if (totalBars > 0) {
+                                        int barIndex = static_cast<int>(relX * totalBars);
+                                        barIndex = qBound(0, barIndex, totalBars - 1);
+                                        int categoryIndex = barIndex / qMax(numBarSets, 1);
+                                        int platformIdx = barIndex % qMax(numBarSets, 1);
+                                        if (categoryIndex >= 0 && categoryIndex < categories.size() && platformIdx >= 0 && platformIdx < 4) {
+                                            QString timeKey = categories[categoryIndex];
+                                            showBarClickDialog(platformIdx, timeKey);
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             for (int p = 0; p < 4; ++p) {
                 void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
                 QChartView* cv = (QChartView*)chartViewPtrs[p];
@@ -3568,12 +3604,16 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
 
 void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QMap<int, QMap<QString, int>>>& platformAoiResultData, const QStringList& aoiResultCategories)
 {
-    if (platformAoiResultData.isEmpty() || aoiResultCategories.isEmpty()) {
+    Q_UNUSED(aoiResultCategories);
+
+    if (platformAoiResultData.isEmpty()) {
         if (!m_platformTrendData.isEmpty()) {
             updatePlatformTrendChart(m_platformTrendData);
         }
         return;
     }
+
+    const QStringList orderedAoiResultCategories = {"OK", "NG"};
 
     QString timeRange = ui.comboTimeRange->currentText();
 
@@ -3626,8 +3666,8 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
         stackedSeries->setLabelsVisible(false);
 
         QList<QBarSet*> barSets;
-        for (int i = 0; i < aoiResultCategories.size() && i < resultColors.size(); ++i) {
-            QBarSet* set = new QBarSet(aoiResultCategories[i]);
+        for (int i = 0; i < orderedAoiResultCategories.size() && i < resultColors.size(); ++i) {
+            QBarSet* set = new QBarSet(orderedAoiResultCategories[i]);
             set->setColor(resultColors[i]);
             set->setLabelColor(QColor(234, 234, 234));
             barSets.append(set);
@@ -3650,11 +3690,11 @@ void Defect_Data_Display::updatePlatformTrendChartStacked(const QMap<QString, QM
                 }
             }
 
-            for (int i = 0; i < aoiResultCategories.size() && i < barSets.size(); ++i) {
+            for (int i = 0; i < orderedAoiResultCategories.size() && i < barSets.size(); ++i) {
                 int val = 0;
                 if (!originalKey.isEmpty() && platformAoiResultData.contains(originalKey)) {
                     const QMap<QString, int>& resMap = platformAoiResultData[originalKey].value(p);
-                    val = resMap.value(aoiResultCategories[i], 0);
+                    val = resMap.value(orderedAoiResultCategories[i], 0);
                 }
                 *barSets[i] << val;
                 columnTotals[ti] += val;
