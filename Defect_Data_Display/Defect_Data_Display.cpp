@@ -6459,55 +6459,6 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
     }
     QSqlDatabase::removeDatabase("chartDist_" + QString::number(QDateTime::currentMSecsSinceEpoch()));
 
-    // Table widget
-    QTableWidget* tableWidget = new QTableWidget(&dialog);
-    tableWidget->setColumnCount(6);
-    tableWidget->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
-    tableWidget->setAlternatingRowColors(true);
-    tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
-    tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    tableWidget->horizontalHeader()->setStretchLastSection(true);
-    tableWidget->verticalHeader()->setVisible(false);
-    tableWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    tableWidget->setMinimumHeight(600);
-    tableWidget->verticalHeader()->setDefaultSectionSize(22);
-
-    // Table styling (reuse same style)
-    tableWidget->setStyleSheet(R"(
-        QTableWidget {
-            background-color: rgba(20, 35, 55, 220);
-            alternate-background-color: rgba(30, 50, 80, 180);
-            color: #e0f0ff;
-            border: 1px solid rgba(0, 217, 255, 80);
-            border-radius: 6px;
-            gridline-color: rgba(0, 217, 255, 40);
-            font-size: 13px;
-        }
-        QTableWidget::item { padding: 5px; }
-        QTableWidget::item:selected { background-color: rgba(0, 150, 200, 150); color: #ffffff; }
-        QHeaderView::section {
-            background-color: rgba(0, 100, 150, 180);
-            color: #ffffff; padding: 6px;
-            border: 1px solid rgba(0, 217, 255, 60);
-            font-weight: bold; font-size: 13px;
-        }
-    )");
-
-    mainLayout->addWidget(tableWidget);
-
-    QObject::connect(tableWidget, &QTableWidget::cellDoubleClicked, this, [=](int row, int /*column*/) {
-        QTableWidgetItem* startItem = tableWidget->item(row, 0);
-        if (!startItem) {
-            return;
-        }
-
-        QString screenId = startItem->data(Qt::UserRole).toString();
-        QString localIp = startItem->data(Qt::UserRole + 1).toString();
-        int platformId = startItem->data(Qt::UserRole + 2).toInt();
-        QDateTime startTime = startItem->data(Qt::UserRole + 3).toDateTime();
-        showInspectionImageDialog(screenId, platformId, localIp, startTime);
-    });
-
     // Close button
     QPushButton* closeBtn = new QPushButton("关闭", &dialog);
     closeBtn->setFixedWidth(100);
@@ -6523,64 +6474,7 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
     btnLayout->addStretch();
     btnLayout->addWidget(closeBtn);
     mainLayout->addLayout(btnLayout);
-
     QObject::connect(closeBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
-
-    // Load data for this grade type
-    QString connectionName = QString("gradetype_%1").arg(QDateTime::currentMSecsSinceEpoch());
-    QSqlDatabase db = QSqlDatabase::addDatabase("QODBC", connectionName);
-    QString connStr = "DRIVER={MySQL ODBC 5.3 ANSI Driver};SERVER=localhost;PORT=3306;DATABASE=ivs_lcd;UID=root;PWD=123456;OPTION=8;";
-    db.setDatabaseName(connStr);
-
-    if (!db.open()) {
-        QMessageBox::warning(&dialog, "错误", "数据库连接失败");
-        return;
-    }
-
-    // Query based on time range
-    QString timeRange = ui.comboTimeRange->currentText();
-    QDate selectedDate = m_selectedDate;
-    QString dateStr = selectedDate.toString("yyyy-MM-dd");
-
-    QString queryStr;
-    if (timeRange == "按小时") {
-        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE(StartTime) = '%2' ORDER BY StartTime DESC LIMIT 500")
-            .arg(gradeName).arg(dateStr);
-    } else if (timeRange == "按天") {
-        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE(StartTime) = '%2' ORDER BY StartTime DESC LIMIT 500")
-            .arg(gradeName).arg(dateStr);
-    } else if (timeRange == "按月") {
-        QString monthStr = dateStr.left(7);
-        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE_FORMAT(StartTime, '%Y-%m') = '%2' ORDER BY StartTime DESC LIMIT 500")
-            .arg(gradeName).arg(monthStr);
-    } else {
-        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' ORDER BY StartTime DESC LIMIT 500")
-            .arg(gradeName);
-    }
-
-    QSqlQuery query(db);
-    if (query.exec(queryStr)) {
-        tableWidget->setRowCount(0);
-        while (query.next()) {
-            int row = tableWidget->rowCount();
-            tableWidget->insertRow(row);
-            for (int col = 0; col < 6; ++col) {
-                tableWidget->setItem(row, col, new QTableWidgetItem(query.value(col).toString()));
-            }
-
-            QTableWidgetItem* startItem = tableWidget->item(row, 0);
-            if (startItem) {
-                startItem->setData(Qt::UserRole, query.value(1).toString());
-                startItem->setData(Qt::UserRole + 1, query.value(6).toString());
-                startItem->setData(Qt::UserRole + 2, query.value(7).toInt());
-                startItem->setData(Qt::UserRole + 3, query.value(0).toDateTime());
-            }
-        }
-    } else {
-        QMessageBox::warning(&dialog, "错误", "查询失败: " + query.lastError().text());
-    }
-
-    QSqlDatabase::removeDatabase(connectionName);
 
     dialog.exec();
 }
