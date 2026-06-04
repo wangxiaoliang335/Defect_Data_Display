@@ -408,12 +408,43 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
                 return true;
             }
 
-            // Handle chartDetail bar chart click
+            // Handle chartDetail bar chart click (newDetailChartView)
             QChartView* detailView = static_cast<QChartView*>(m_chartViewDetail);
             if (detailView && (detailView == watched || detailView->viewport() == watched)) {
-                // The bar click signal is already connected in updateDetailTable via QBarSeries::clicked
-                // This eventFilter handler can be used for additional interactions if needed
-                return false;
+                QChart* chart = detailView->chart();
+                QList<QAbstractSeries*> seriesList = chart->series();
+                if (!seriesList.isEmpty()) {
+                    QPointF chartPos = chart->mapToValue(QPointF(me->pos()), seriesList.first());
+
+                    QAbstractBarSeries* barSeries = qobject_cast<QAbstractBarSeries*>(seriesList.first());
+                    if (barSeries) {
+                        QRectF plotArea = chart->plotArea();
+                        qreal relX = (me->pos().x() - plotArea.left()) / plotArea.width();
+
+                        QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
+                        if (!axesX.isEmpty()) {
+                            QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
+                            if (axisX) {
+                                QStringList categories = axisX->categories();
+                                if (!categories.isEmpty()) {
+                                    int numCategories = categories.size();
+                                    int numBarSets = barSeries->count();
+                                    int totalBars = numCategories * numBarSets;
+                                    if (totalBars > 0) {
+                                        int barIndex = static_cast<int>(relX * totalBars);
+                                        int categoryIndex = barIndex / qMax(numBarSets, 1);
+                                        if (categoryIndex >= 0 && categoryIndex < categories.size()) {
+                                            QString gradeName = categories[categoryIndex];
+                                            qDebug() << "[DetailChart] Clicked at pos:" << me->pos() << "chartPos:" << chartPos << "bar index:" << barIndex << "categoryIndex:" << categoryIndex << "grade:" << gradeName;
+                                            showGradeTypeDialog(gradeName);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return true;  // Consume the event
             }
         }
     }
@@ -520,12 +551,12 @@ void Defect_Data_Display::showDetailPieDialog()
     QLabel* titleLabel = new QLabel(m_detailPieTitle.isEmpty() ? "缺陷类型分布" : m_detailPieTitle, &dialog);
     titleLabel->setObjectName("titleLabel");
     titleLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(titleLabel);
+    mainLayout->addWidget(titleLabel, 0);
 
     QLabel* subtitleLabel = new QLabel("点击下方表格查看详细分布信息", &dialog);
     subtitleLabel->setObjectName("subtitleLabel");
     subtitleLabel->setAlignment(Qt::AlignCenter);
-    mainLayout->addWidget(subtitleLabel);
+    mainLayout->addWidget(subtitleLabel, 0);
 
     // Content layout: mini pie chart + stats on left, table on right
     QHBoxLayout* contentLayout = new QHBoxLayout();
@@ -616,7 +647,10 @@ void Defect_Data_Display::showDetailPieDialog()
 
     QLabel* tableTitle = new QLabel("详细数据", &dialog);
     tableTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
+    // 加这一行，高度改成你想要的像素
+    tableTitle->setFixedHeight(20);
     rightLayout->addWidget(tableTitle);
+    //rightLayout->addWidget(table, 1);
 
     QTableWidget* table = new QTableWidget(&dialog);
     table->setColumnCount(4);
@@ -635,7 +669,7 @@ void Defect_Data_Display::showDetailPieDialog()
     table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     // Calculate table height based on row count
-    const int rowHeight = 36;
+    const int rowHeight = 40; //36;
     const int hdrHeight = 38;
     const int tableHeight = rowCount * rowHeight + hdrHeight;
     table->setFixedHeight(tableHeight);
@@ -689,10 +723,10 @@ void Defect_Data_Display::showDetailPieDialog()
     table->setColumnWidth(0, 250);
     table->setColumnWidth(1, 150);
     table->setColumnWidth(2, 150);
-    rightLayout->addWidget(table);
+    rightLayout->addWidget(table, 6);
     contentLayout->addLayout(rightLayout, 3);
 
-    mainLayout->addLayout(contentLayout);
+    mainLayout->addLayout(contentLayout, 1);
 
     // Bottom button
     QHBoxLayout* buttonLayout = new QHBoxLayout();
@@ -702,7 +736,7 @@ void Defect_Data_Display::showDetailPieDialog()
     connect(okBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
     buttonLayout->addWidget(okBtn);
     buttonLayout->addStretch();
-    mainLayout->addLayout(buttonLayout);
+    mainLayout->addLayout(buttonLayout, 0);
 
     dialog.exec();
 }
@@ -1109,6 +1143,17 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
     for (int i = 0; i < headers.size() && i < ui.searchResultTable->columnCount(); ++i)
         ui.searchResultTable->setHorizontalHeaderItem(i, new QTableWidgetItem(headers[i]));
 
+    // Connect table cell click to open Grade_AOI detail dialog
+    connect(ui.searchResultTable, &QTableWidget::cellClicked, this, [=](int row, int col) {
+        QTableWidgetItem* gradeItem = ui.searchResultTable->item(row, 1);  // Grade_AOI column (index 1)
+        if (gradeItem) {
+            QString gradeName = gradeItem->text();
+            if (!gradeName.isEmpty()) {
+                showGradeTypeDialog(gradeName);
+            }
+        }
+    });
+
     // Query database for matching records (no time limit for QR search)
     if (!m_db.isOpen()) {
         ui.labelStatus->setText("Database not connected");
@@ -1341,7 +1386,7 @@ void Defect_Data_Display::onTabChanged(int index)
             qDebug() << "Index 1: Trend";
             CachedTabData* cache = &m_trendCache;
             if (isCacheValid(cache, timeRange, m_selectedDate)) {
-                updateTrendChart(cache->trendData, cache->defectRates);
+                updateTrendChart(cache->trendDataByGrade, cache->defectRatesByGrade, cache->allGrades, timeRange);
             } else {
                 loadTrendDataAsync(timeRange);
             }
@@ -1972,17 +2017,18 @@ void Defect_Data_Display::onDataLoaded_DefectMapping(const QList<QPair<int, int>
     updateDefectMappingChart(positions, types);
 }
 
-void Defect_Data_Display::onDataLoaded_Trend(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates)
+void Defect_Data_Display::onDataLoaded_Trend(const QMap<QString, QMap<QString, int>>& trendData, const QMap<QString, QMap<QString, double>>& defectRates, const QStringList& allGrades)
 {
-    qDebug() << "=== onDataLoaded_Trend called ===" << "data points:" << trendData.size();
+    qDebug() << "=== onDataLoaded_Trend called ===" << "data points:" << trendData.size() << "grades:" << allGrades;
 
-    m_trendCache.trendData = trendData;
-    m_trendCache.defectRates = defectRates;
+    m_trendCache.trendDataByGrade = trendData;
+    m_trendCache.defectRatesByGrade = defectRates;
+    m_trendCache.allGrades = allGrades;
     m_trendCache.timeRange = ui.comboTimeRange->currentText();
     m_trendCache.date = m_selectedDate;
     m_trendCache.timestamp = QDateTime::currentMSecsSinceEpoch();
 
-    updateTrendChart(trendData, defectRates);
+    updateTrendChart(trendData, defectRates, allGrades, ui.comboTimeRange->currentText());
 }
 
 void Defect_Data_Display::onDataLoaded_Detail(const QList<QVariantList>& defectDetails)
@@ -2461,57 +2507,86 @@ void Defect_Data_Display::loadTrendData(const QString& timeRange)
     QString dateRangeClause = getDateTimeRange(timeRange);
     QString timeFormat = getTimeFilterClause(timeRange);
 
-    qDebug() << "Executing optimized trend query...";
+    qDebug() << "Executing optimized trend query with Grade_AOI grouping...";
 
-    QString combinedTrendQuery = QString(R"(
+    // Query inspection results grouped by time period AND Grade_AOI
+    QString trendQuery = QString(R"(
         SELECT
-            defect_counts.time_period,
-            COALESCE(defect_counts.defect_count, 0) as defect_count,
-            COALESCE(total_counts.total_count, 0) as total_count
-        FROM (
-            SELECT %1 as time_period, COUNT(*) as defect_count
-            FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
-            WHERE %2
-            GROUP BY time_period
-        ) defect_counts
-        LEFT JOIN (
-            SELECT %1 as time_period, COUNT(*) as total_count
-            FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-            WHERE %2
-            GROUP BY time_period
-        ) total_counts ON defect_counts.time_period = total_counts.time_period
-        ORDER BY defect_counts.time_period
+            %1 as time_period,
+            Grade_AOI,
+            COUNT(*) as cnt
+        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        WHERE %2
+        GROUP BY time_period, Grade_AOI
+        ORDER BY time_period, Grade_AOI
     )").arg(timeFormat).arg(dateRangeClause);
 
     QSqlQuery query(m_db);
     query.setForwardOnly(true);
     query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
 
-    if (!query.exec(combinedTrendQuery)) {
+    if (!query.exec(trendQuery)) {
         qDebug() << "Trend query failed:" << query.lastError().text();
         return;
     }
 
-    QMap<QString, QPair<int, int>> trendData;
-    QMap<QString, double> defectRates;
+    // Data structure: time_period -> (Grade_AOI -> count)
+    QMap<QString, QMap<QString, int>> trendData;
+    // Also track totals per time period for rate calculation
+    QMap<QString, int> totalPerPeriod;
+    QStringList allGrades;
 
     while (query.next()) {
         QString period = query.value(0).toString();
-        int defectCount = query.value(1).toInt();
-        int totalCount = query.value(2).toInt();
-        double rate = (totalCount > 0) ? (defectCount * 100.0 / totalCount) : 0;
+        QString grade = query.value(1).toString();
+        int cnt = query.value(2).toInt();
 
-        trendData[period] = qMakePair(defectCount, totalCount);
-        defectRates[period] = rate;
+        trendData[period][grade] = cnt;
+        totalPerPeriod[period] += cnt;
+        if (!allGrades.contains(grade)) {
+            allGrades.append(grade);
+        }
     }
 
-    qDebug() << "Trend query completed, periods:" << trendData.size();
-    updateTrendChart(trendData, defectRates);
+    qDebug() << "Trend query completed, periods:" << trendData.size() << "grades:" << allGrades;
+
+    // Compute defect rate per grade (grade count / total count per period * 100)
+    QMap<QString, QMap<QString, double>> defectRates;
+    for (auto periodIt = trendData.constBegin(); periodIt != trendData.constEnd(); ++periodIt) {
+        QString period = periodIt.key();
+        int total = totalPerPeriod.value(period, 0);
+        for (auto gradeIt = periodIt.value().constBegin(); gradeIt != periodIt.value().constEnd(); ++gradeIt) {
+            QString grade = gradeIt.key();
+            int cnt = gradeIt.value();
+            double rate = (total > 0) ? (cnt * 100.0 / total) : 0;
+            defectRates[period][grade] = rate;
+        }
+    }
+
+    // Sort grades: OK first, then R1-R5, then others alphabetically
+    QStringList sortedGrades = allGrades;
+    std::sort(sortedGrades.begin(), sortedGrades.end(), [](const QString& a, const QString& b) {
+        if (a == "OK") return true;
+        if (b == "OK") return false;
+        if (a.startsWith("R") && b.startsWith("R")) {
+            bool aOk, bOk;
+            int aNum = a.mid(1).toInt(&aOk);
+            int bNum = b.mid(1).toInt(&bOk);
+            if (aOk && bOk) return aNum < bNum;
+        }
+        return a < b;
+    });
+
+    updateTrendChart(trendData, defectRates, sortedGrades, timeRange);
 }
 
-void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates)
+void Defect_Data_Display::updateTrendChart(
+    const QMap<QString, QMap<QString, int>>& trendData,
+    const QMap<QString, QMap<QString, double>>& defectRates,
+    const QStringList& allGrades,
+    const QString& timeRange)
 {
-    qDebug() << "updateTrendChart called with" << trendData.size() << "data points";
+    qDebug() << "updateTrendChart called with" << trendData.size() << "data points, grades:" << allGrades;
 
     // Check if chart views are initialized
     if (!m_chartViewTrend || !m_chartViewDefectRate) {
@@ -2538,103 +2613,173 @@ void Defect_Data_Display::updateTrendChart(const QMap<QString, QPair<int, int>>&
         return;
     }
 
-    // Determine time format based on current selection
-    QString timeRange = ui.comboTimeRange->currentText();
+    // Sort time periods
+    QStringList sortedTimes = trendData.keys();
+    if (timeRange == "按小时" || timeRange == "按天") {
+        std::sort(sortedTimes.begin(), sortedTimes.end(), [](const QString& a, const QString& b) {
+            return a < b;
+        });
+    }
 
-    QLineSeries* defectSeries = new QLineSeries();
-    defectSeries->setName("Defect Count");
-    defectSeries->setColor(QColor(255, 100, 100));
-    defectSeries->setPointLabelsVisible(true);
-    defectSeries->setPointLabelsFormat("@yPoint");
-    defectSeries->setPointLabelsColor(QColor(255, 200, 100));
-    defectSeries->setPointLabelsFont(QFont("Arial", 9, QFont::Bold));
-
-    QStringList categories;
-    int index = 0;
-    for (auto it = trendData.constBegin(); it != trendData.constEnd(); ++it) {
-        QString label = it.key();
-        // Format label based on time range
+    // Format time labels for display
+    QStringList timeLabels;
+    for (const QString& timeKey : sortedTimes) {
+        QString label = timeKey;
         if (timeRange == "按小时") {
-            // Extract hour from "2026-05-22 00:00"
             if (label.contains(" ")) {
-                QString timePart = label.split(" ").at(1);
-                label = timePart.left(5);  // Get "HH:00"
+                label = label.split(" ").at(1).left(5);
             }
         } else if (timeRange == "按天") {
-            // Show only day "2026-05-22" -> "22"
             if (label.contains("-")) {
                 QStringList parts = label.split("-");
                 if (parts.size() >= 3) {
-                    label = parts.at(2);  // Get day number
+                    label = parts.at(2);
                 }
             }
         }
-        // 按月: keep as "2026-05"
-        categories.append(label);
-        defectSeries->append(index++, it.value().first);
+        timeLabels.append(label);
     }
 
-    chartTrend->addSeries(defectSeries);
-    chartTrend->setTitle("Defect Count Trend");
+    // Grade colors (reuse palette from updatePlatformGradeTrendChart)
+    QMap<QString, QColor> gradeColors;
+    gradeColors["OK"] = QColor(0, 255, 136);
+    gradeColors["R1"] = QColor(255, 68, 68);
+    gradeColors["R2"] = QColor(255, 165, 0);
+    gradeColors["R3"] = QColor(255, 215, 0);
+    gradeColors["R4"] = QColor(50, 205, 50);
+    gradeColors["R5"] = QColor(0, 191, 255);
+    gradeColors["NG"] = QColor(255, 0, 0);
+    QList<QColor> otherColors = {
+        QColor(138, 43, 226), QColor(255, 20, 147), QColor(64, 224, 208),
+        QColor(255, 127, 80), QColor(106, 90, 205), QColor(152, 251, 152)
+    };
 
+    // Chart 1: Defect Count Trend (multiple line series, one per Grade_AOI)
+    chartTrend->setTitle("Count Trend by Grade_AOI");
+    chartTrend->setAnimationOptions(QChart::AllAnimations);
+    chartTrend->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartTrend->setTitleBrush(QBrush(QColor(0, 217, 255)));
+
+    int colorIdx = 0;
+    int maxCount = 1;
+
+    for (const QString& grade : allGrades) {
+        QLineSeries* series = new QLineSeries();
+        series->setName(grade);
+        series->setPointLabelsVisible(true);
+        series->setPointLabelsFormat("@yPoint");
+        series->setPointLabelsColor(QColor(255, 255, 255));
+        series->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
+
+        // Set color
+        if (gradeColors.contains(grade)) {
+            series->setColor(gradeColors[grade]);
+            series->setPointLabelsColor(gradeColors[grade]);
+        } else {
+            series->setColor(otherColors[colorIdx % otherColors.size()]);
+            series->setPointLabelsColor(otherColors[colorIdx % otherColors.size()]);
+            colorIdx++;
+        }
+
+        for (int i = 0; i < sortedTimes.size(); ++i) {
+            QString period = sortedTimes[i];
+            int cnt = trendData.value(period).value(grade, 0);
+            series->append(i, cnt);
+            if (cnt > maxCount) maxCount = cnt;
+        }
+
+        chartTrend->addSeries(series);
+    }
+
+    // X axis for count chart
     QBarCategoryAxis* axisXTrend = new QBarCategoryAxis();
-    axisXTrend->append(categories);
+    axisXTrend->append(timeLabels);
     axisXTrend->setLabelsColor(QColor(234, 234, 234));
     chartTrend->addAxis(axisXTrend, Qt::AlignBottom);
 
+    // Y axis for count chart
     QValueAxis* axisYTrend = new QValueAxis();
-    axisYTrend->setTitleText("Defect Count");
+    axisYTrend->setTitleText("Count");
     axisYTrend->setLabelFormat("%d");
     axisYTrend->setLabelsColor(QColor(234, 234, 234));
     axisYTrend->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    int maxDefect = 1;
-    for (auto it = trendData.constBegin(); it != trendData.constEnd(); ++it) {
-        if (it.value().first > maxDefect) maxDefect = it.value().first;
-    }
-    axisYTrend->setRange(0, maxDefect + maxDefect * 0.25);
+    axisYTrend->setRange(0, maxCount + maxCount * 0.25);
     chartTrend->addAxis(axisYTrend, Qt::AlignLeft);
 
-    defectSeries->attachAxis(axisXTrend);
-    defectSeries->attachAxis(axisYTrend);
-
-    QLineSeries* rateSeries = new QLineSeries();
-    rateSeries->setName("Defect Rate (%)");
-    rateSeries->setColor(QColor(0, 217, 255));
-    rateSeries->setPointLabelsVisible(true);
-    rateSeries->setPointLabelsFormat("@yPoint");
-    rateSeries->setPointLabelsColor(QColor(100, 220, 255));
-    rateSeries->setPointLabelsFont(QFont("Arial", 9, QFont::Bold));
-
-    // Reuse the same categories from defect series for rate chart
-    index = 0;
-    for (auto it = defectRates.constBegin(); it != defectRates.constEnd(); ++it) {
-        rateSeries->append(index++, it.value());
+    // Attach axes to all count series
+    for (auto series : chartTrend->series()) {
+        series->attachAxis(axisXTrend);
+        series->attachAxis(axisYTrend);
     }
 
-    chartRate->addSeries(rateSeries);
-    chartRate->setTitle("Defect Rate Trend");
+    // Chart 2: Defect Rate Trend (multiple line series, one per Grade_AOI)
+    chartRate->setTitle("Rate Trend by Grade_AOI (%)");
+    chartRate->setAnimationOptions(QChart::AllAnimations);
+    chartRate->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartRate->setTitleBrush(QBrush(QColor(0, 217, 255)));
 
-    // Use the same formatted categories as defect chart
+    colorIdx = 0;
+    double maxRate = 1.0;
+
+    for (const QString& grade : allGrades) {
+        QLineSeries* series = new QLineSeries();
+        series->setName(grade);
+        series->setPointLabelsVisible(true);
+        series->setPointLabelsFormat("@yPoint");
+        series->setPointLabelsColor(QColor(255, 255, 255));
+        series->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
+
+        // Set color
+        if (gradeColors.contains(grade)) {
+            series->setColor(gradeColors[grade]);
+            series->setPointLabelsColor(gradeColors[grade]);
+        } else {
+            series->setColor(otherColors[colorIdx % otherColors.size()]);
+            series->setPointLabelsColor(otherColors[colorIdx % otherColors.size()]);
+            colorIdx++;
+        }
+
+        for (int i = 0; i < sortedTimes.size(); ++i) {
+            QString period = sortedTimes[i];
+            double rate = defectRates.value(period).value(grade, 0);
+            series->append(i, rate);
+            if (rate > maxRate) maxRate = rate;
+        }
+
+        chartRate->addSeries(series);
+    }
+
+    // X axis for rate chart
     QBarCategoryAxis* axisXRate = new QBarCategoryAxis();
-    axisXRate->append(categories);
+    axisXRate->append(timeLabels);
     axisXRate->setLabelsColor(QColor(234, 234, 234));
     chartRate->addAxis(axisXRate, Qt::AlignBottom);
 
+    // Y axis for rate chart
     QValueAxis* axisYRate = new QValueAxis();
-    axisYRate->setTitleText("Defect Rate (%)");
+    axisYRate->setTitleText("Rate (%)");
     axisYRate->setLabelFormat("%.2f");
     axisYRate->setLabelsColor(QColor(234, 234, 234));
     axisYRate->setTitleBrush(QBrush(QColor(0, 217, 255)));
-    // Set Y-axis range dynamically based on max defect rate
-    double maxRate = 10.0;
-    for (auto it = defectRates.constBegin(); it != defectRates.constEnd(); ++it) {
-        if (it.value() > maxRate) maxRate = it.value();
-    }
-    axisYRate->setRange(0, maxRate * 1.3);  // Add 30% padding for labels
+    axisYRate->setRange(0, maxRate * 1.3);
     chartRate->addAxis(axisYRate, Qt::AlignLeft);
 
-    rateSeries->attachAxis(axisXRate);
-    rateSeries->attachAxis(axisYRate);
+    // Attach axes to all rate series
+    for (auto series : chartRate->series()) {
+        series->attachAxis(axisXRate);
+        series->attachAxis(axisYRate);
+    }
+
+    // Style legend for both charts
+    chartTrend->legend()->setLabelColor(QColor(234, 234, 234));
+    chartTrend->legend()->setFont(QFont("Arial", 9));
+    chartTrend->legend()->setAlignment(Qt::AlignRight);
+
+    chartRate->legend()->setLabelColor(QColor(234, 234, 234));
+    chartRate->legend()->setFont(QFont("Arial", 9));
+    chartRate->legend()->setAlignment(Qt::AlignRight);
+
+    qDebug() << "updateTrendChart completed with" << allGrades.size() << "grade series";
 }
 
 void Defect_Data_Display::loadDetailData(const QString& timeRange)
@@ -4041,13 +4186,12 @@ void DataLoaderThread::run()
     qDebug() << "Querying platform Grade_AOI trend...";
     QStringList allGrades;
     QMap<QString, QMap<QString, int>> platformGradeTrendData;
-    QString gradeTrendQuery = QString(R"(
-        SELECT %1 as time_period, Grade_AOI, COUNT(*) as cnt
-        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-        WHERE %2
-        GROUP BY time_period, Grade_AOI
-        ORDER BY time_period, Grade_AOI
-    )").arg(timeFormat).arg(queryCondition);
+    QString gradeTrendQuery = QString("SELECT %1 as time_period, Grade_AOI, COUNT(*) as cnt "
+        "FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime) "
+        "WHERE %2 "
+        "GROUP BY time_period, Grade_AOI "
+        "ORDER BY time_period, Grade_AOI")
+        .arg(timeFormat).arg(queryCondition);
     qDebug() << "[Chart] Grade trend query:" << gradeTrendQuery;
     QSqlQuery gradeQuery(db);
     gradeQuery.setForwardOnly(true);
@@ -4336,44 +4480,68 @@ void TabDataLoaderThread::run()
             timeFormat = "DATE_FORMAT(StartTime, '%Y-%m')";
         }
 
-        QString combinedTrendQuery = QString(R"(
+        // Query inspection results grouped by time period AND Grade_AOI
+        QString trendQuery = QString(R"(
             SELECT
-                defect_counts.time_period,
-                COALESCE(defect_counts.defect_count, 0) as defect_count,
-                COALESCE(total_counts.total_count, 0) as total_count
-            FROM (
-                SELECT %1 as time_period, COUNT(*) as defect_count
-                FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
-                WHERE %2
-                GROUP BY time_period
-            ) defect_counts
-            LEFT JOIN (
-                SELECT %1 as time_period, COUNT(*) as total_count
-                FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
-                WHERE %2
-                GROUP BY time_period
-            ) total_counts ON defect_counts.time_period = total_counts.time_period
-            ORDER BY defect_counts.time_period
+                %1 as time_period,
+                Grade_AOI,
+                COUNT(*) as cnt
+            FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+            WHERE %2
+            GROUP BY time_period, Grade_AOI
+            ORDER BY time_period, Grade_AOI
         )").arg(timeFormat).arg(m_dateRange);
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
         query.setNumericalPrecisionPolicy(QSql::LowPrecisionDouble);
 
-        if (query.exec(combinedTrendQuery)) {
-            QMap<QString, QPair<int, int>> trendData;
-            QMap<QString, double> defectRates;
+        if (query.exec(trendQuery)) {
+            // Data structure: time_period -> (Grade_AOI -> count)
+            QMap<QString, QMap<QString, int>> trendData;
+            QMap<QString, int> totalPerPeriod;
+            QStringList allGrades;
 
             while (query.next()) {
                 QString period = query.value(0).toString();
-                int defectCount = query.value(1).toInt();
-                int totalCount = query.value(2).toInt();
-                double rate = (totalCount > 0) ? (defectCount * 100.0 / totalCount) : 0;
+                QString grade = query.value(1).toString();
+                int cnt = query.value(2).toInt();
 
-                trendData[period] = qMakePair(defectCount, totalCount);
-                defectRates[period] = rate;
+                trendData[period][grade] = cnt;
+                totalPerPeriod[period] += cnt;
+                if (!allGrades.contains(grade)) {
+                    allGrades.append(grade);
+                }
             }
-            emit trendDataLoaded(trendData, defectRates);
+
+            // Compute defect rate per grade
+            QMap<QString, QMap<QString, double>> defectRates;
+            for (auto periodIt = trendData.constBegin(); periodIt != trendData.constEnd(); ++periodIt) {
+                QString period = periodIt.key();
+                int total = totalPerPeriod.value(period, 0);
+                for (auto gradeIt = periodIt.value().constBegin(); gradeIt != periodIt.value().constEnd(); ++gradeIt) {
+                    QString grade = gradeIt.key();
+                    int cnt = gradeIt.value();
+                    double rate = (total > 0) ? (cnt * 100.0 / total) : 0;
+                    defectRates[period][grade] = rate;
+                }
+            }
+
+            // Sort grades: OK first, then R1-R5, then others alphabetically
+            QStringList sortedGrades = allGrades;
+            std::sort(sortedGrades.begin(), sortedGrades.end(), [](const QString& a, const QString& b) {
+                if (a == "OK") return true;
+                if (b == "OK") return false;
+                if (a.startsWith("R") && b.startsWith("R")) {
+                    bool aOk, bOk;
+                    int aNum = a.mid(1).toInt(&aOk);
+                    int bNum = b.mid(1).toInt(&bOk);
+                    if (aOk && bOk) return aNum < bNum;
+                }
+                return a < b;
+            });
+
+            emit trendDataLoaded(trendData, defectRates, sortedGrades);
         } else {
             qDebug() << "Trend query failed:" << query.lastError().text();
         }

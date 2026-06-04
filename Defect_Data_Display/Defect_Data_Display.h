@@ -38,8 +38,9 @@ class TabDataLoaderThread;
 struct CachedTabData {
     QList<QPair<int, int>> positions;
     QStringList types;
-    QMap<QString, QPair<int, int>> trendData;
-    QMap<QString, double> defectRates;
+    QMap<QString, QMap<QString, int>> trendDataByGrade;
+    QMap<QString, QMap<QString, double>> defectRatesByGrade;
+    QStringList allGrades;
     QList<QVariantList> defectDetails;
     QString timeRange;
     QDate date;
@@ -80,7 +81,7 @@ private slots:
                                  int totalInspect, int passCount, int failCount, double passRate);
     void onDataLoaded_Platform(const QMap<int, QPair<int, int>>& platformStats);
     void onDataLoaded_DefectMapping(const QList<QPair<int, int>>& positions, const QStringList& types);
-    void onDataLoaded_Trend(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
+    void onDataLoaded_Trend(const QMap<QString, QMap<QString, int>>& trendData, const QMap<QString, QMap<QString, double>>& defectRates, const QStringList& allGrades);
     void onDataLoaded_Detail(const QList<QVariantList>& defectDetails);
     void onLoadFinished(int loadId);
 
@@ -160,7 +161,7 @@ private:
     void updateAoiDefectChart(const QMap<QString, QList<QPair<QString, int>>>& defectByType);
     void updateInspectionResultChart(const QMap<QString, int>& passByPeriod, const QMap<QString, int>& failByPeriod);
     void updateDefectMappingChart(const QList<QPair<int, int>>& defectPositions, const QStringList& defectTypes);
-    void updateTrendChart(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
+    void updateTrendChart(const QMap<QString, QMap<QString, int>>& trendData, const QMap<QString, QMap<QString, double>>& defectRates, const QStringList& allGrades, const QString& timeRange);
     void updateDetailTable(const QList<QVariantList>& defectDetails);
     void updateStats(int totalInspect, int passCount, int failCount, double passRate, int totalDefects);
     QString getTimeFilterClause(const QString& timeRange);
@@ -210,7 +211,7 @@ signals:
                              int totalInspect, int passCount, int failCount, double passRate);
     void platformDataLoaded(const QMap<int, QPair<int, int>>& platformStats);
     void defectMappingLoaded(const QList<QPair<int, int>>& positions, const QStringList& types);
-    void trendDataLoaded(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
+    void trendDataLoaded(const QMap<QString, QMap<QString, int>>& trendData, const QMap<QString, QMap<QString, double>>& defectRates, const QStringList& allGrades);
     void detailDataLoaded(const QList<QVariantList>& defectDetails);
     void finished(int loadId);
 
@@ -243,7 +244,7 @@ public:
 
 signals:
     void defectMappingDataLoaded(const QList<QPair<int, int>>& positions, const QStringList& types);
-    void trendDataLoaded(const QMap<QString, QPair<int, int>>& trendData, const QMap<QString, double>& defectRates);
+    void trendDataLoaded(const QMap<QString, QMap<QString, int>>& trendData, const QMap<QString, QMap<QString, double>>& defectRates, const QStringList& allGrades);
     void detailDataLoaded(const QList<QVariantList>& defectDetails);
     void locationAbnormalDataLoaded(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void finished(int loadId, int tabIndex);
