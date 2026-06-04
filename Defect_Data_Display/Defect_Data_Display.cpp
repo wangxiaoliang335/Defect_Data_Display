@@ -2228,8 +2228,17 @@ void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap
         return;
     }
 
+    auto isY2Grade = [](const QString& gradeName) {
+        return gradeName.trimmed().compare("Y2", Qt::CaseInsensitive) == 0;
+    };
+
     // Sort grades: OK first, then R1-R5, then others alphabetically
-    QStringList sortedGrades = allGrades;
+    QStringList sortedGrades;
+    for (const QString& grade : allGrades) {
+        if (!isY2Grade(grade)) {
+            sortedGrades.append(grade);
+        }
+    }
     std::sort(sortedGrades.begin(), sortedGrades.end(), [](const QString& a, const QString& b) {
         if (a == "OK") return true;
         if (b == "OK") return false;
@@ -2535,7 +2544,7 @@ void Defect_Data_Display::updateDefectMappingChart(const QList<QPair<int, int>>&
             QScatterSeries* series = new QScatterSeries();
             series->setName(type);
             series->setColor(defectColors.value(type, Qt::gray));
-            series->setMarkerSize(8);
+            series->setMarkerSize(4);
             seriesMap[type] = series;
         }
         seriesMap[type]->append(defectPositions[i].first, defectPositions[i].second);
@@ -2785,43 +2794,50 @@ void Defect_Data_Display::updateTrendChart(
         QColor(255, 127, 80), QColor(106, 90, 205), QColor(152, 251, 152)
     };
 
-    // Chart 1: Defect Count Trend (multiple line series, one per Grade_AOI)
+    // Chart 1: Defect Count Trend (grouped bars, excluding Y2)
     chartTrend->setTitle("Count Trend by Grade_AOI");
     chartTrend->setAnimationOptions(QChart::AllAnimations);
     chartTrend->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
     chartTrend->setTitleBrush(QBrush(QColor(0, 217, 255)));
 
+    auto isY2Grade = [](const QString& gradeName) {
+        return gradeName.trimmed().compare("Y2", Qt::CaseInsensitive) == 0;
+    };
+
+    QStringList basicGrades;
+    for (const QString& grade : allGrades) {
+        if (!isY2Grade(grade)) {
+            basicGrades.append(grade.trimmed());
+        }
+    }
+
     int colorIdx = 0;
     int maxCount = 1;
+    QBarSeries* countSeries = new QBarSeries();
+    countSeries->setLabelsVisible(true);
+    countSeries->setLabelsFormat("@value");
+    countSeries->setLabelsPosition(QAbstractBarSeries::LabelsOutsideEnd);
 
-    for (const QString& grade : allGrades) {
-        if (grade == "Y2") continue;  // Y2 has its own chart
-        QLineSeries* series = new QLineSeries();
-        series->setName(grade);
-        series->setPointLabelsVisible(true);
-        series->setPointLabelsFormat("@yPoint");
-        series->setPointLabelsColor(QColor(255, 255, 255));
-        series->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
+    for (const QString& grade : basicGrades) {
+        QBarSet* barSet = new QBarSet(grade);
 
-        // Set color
-        if (gradeColors.contains(grade)) {
-            series->setColor(gradeColors[grade]);
-            series->setPointLabelsColor(gradeColors[grade]);
-        } else {
-            series->setColor(otherColors[colorIdx % otherColors.size()]);
-            series->setPointLabelsColor(otherColors[colorIdx % otherColors.size()]);
-            colorIdx++;
-        }
+        QColor seriesColor = gradeColors.contains(grade)
+            ? gradeColors[grade]
+            : otherColors[colorIdx++ % otherColors.size()];
+        barSet->setColor(seriesColor);
+        barSet->setBorderColor(seriesColor.lighter(130));
+        barSet->setLabelColor(seriesColor);
 
-        for (int i = 0; i < sortedTimes.size(); ++i) {
-            QString period = sortedTimes[i];
+        for (const QString& period : sortedTimes) {
             int cnt = trendData.value(period).value(grade, 0);
-            series->append(i, cnt);
+            *barSet << cnt;
             if (cnt > maxCount) maxCount = cnt;
         }
 
-        chartTrend->addSeries(series);
+        countSeries->append(barSet);
     }
+
+    chartTrend->addSeries(countSeries);
 
     // X axis for count chart
     QBarCategoryAxis* axisXTrend = new QBarCategoryAxis();
@@ -2838,13 +2854,10 @@ void Defect_Data_Display::updateTrendChart(
     axisYTrend->setRange(0, maxCount + maxCount * 0.25);
     chartTrend->addAxis(axisYTrend, Qt::AlignLeft);
 
-    // Attach axes to all count series
-    for (auto series : chartTrend->series()) {
-        series->attachAxis(axisXTrend);
-        series->attachAxis(axisYTrend);
-    }
+    countSeries->attachAxis(axisXTrend);
+    countSeries->attachAxis(axisYTrend);
 
-    // Chart 2: Defect Rate Trend (multiple line series, one per Grade_AOI)
+    // Chart 2: Defect Rate Trend (grouped bars, excluding Y2)
     chartRate->setTitle("Rate Trend by Grade_AOI (%)");
     chartRate->setAnimationOptions(QChart::AllAnimations);
     chartRate->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
@@ -2852,35 +2865,31 @@ void Defect_Data_Display::updateTrendChart(
 
     colorIdx = 0;
     double maxRate = 1.0;
+    QBarSeries* rateSeries = new QBarSeries();
+    rateSeries->setLabelsVisible(true);
+    rateSeries->setLabelsFormat("@value");
+    rateSeries->setLabelsPosition(QAbstractBarSeries::LabelsOutsideEnd);
 
-    for (const QString& grade : allGrades) {
-        if (grade == "Y2") continue;  // Y2 has its own chart
-        QLineSeries* series = new QLineSeries();
-        series->setName(grade);
-        series->setPointLabelsVisible(true);
-        series->setPointLabelsVisible(false);
-        series->setPointLabelsColor(QColor(255, 255, 255));
-        series->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
+    for (const QString& grade : basicGrades) {
+        QBarSet* barSet = new QBarSet(grade);
 
-        // Set color
-        if (gradeColors.contains(grade)) {
-            series->setColor(gradeColors[grade]);
-            series->setPointLabelsColor(gradeColors[grade]);
-        } else {
-            series->setColor(otherColors[colorIdx % otherColors.size()]);
-            series->setPointLabelsColor(otherColors[colorIdx % otherColors.size()]);
-            colorIdx++;
-        }
+        QColor seriesColor = gradeColors.contains(grade)
+            ? gradeColors[grade]
+            : otherColors[colorIdx++ % otherColors.size()];
+        barSet->setColor(seriesColor);
+        barSet->setBorderColor(seriesColor.lighter(130));
+        barSet->setLabelColor(seriesColor);
 
-        for (int i = 0; i < sortedTimes.size(); ++i) {
-            QString period = sortedTimes[i];
+        for (const QString& period : sortedTimes) {
             double rate = defectRates.value(period).value(grade, 0);
-            series->append(i, rate);
+            *barSet << rate;
             if (rate > maxRate) maxRate = rate;
         }
 
-        chartRate->addSeries(series);
+        rateSeries->append(barSet);
     }
+
+    chartRate->addSeries(rateSeries);
 
     // X axis for rate chart
     QBarCategoryAxis* axisXRate = new QBarCategoryAxis();
@@ -2897,38 +2906,83 @@ void Defect_Data_Display::updateTrendChart(
     axisYRate->setRange(0, maxRate * 1.3);
     chartRate->addAxis(axisYRate, Qt::AlignLeft);
 
-    // Attach axes to all rate series
-    for (auto series : chartRate->series()) {
-        series->attachAxis(axisXRate);
-        series->attachAxis(axisYRate);
-    }
+    rateSeries->attachAxis(axisXRate);
+    rateSeries->attachAxis(axisYRate);
 
+    const auto addBarValueLabels = [this](QChart* chart, QAbstractBarSeries* series, int decimals) {
+        QPointer<QChart> safeChart(chart);
+        QPointer<QAbstractBarSeries> safeSeries(series);
 
-        // Add custom 2-decimal point labels for rate chart
+        QObject::connect(chart, &QChart::plotAreaChanged, this, [safeChart, safeSeries, decimals](const QRectF& plotArea) {
+            qDebug() << "[BarValueLabels] plotAreaChanged triggered"
+                     << "chart=" << safeChart.data()
+                     << "series=" << safeSeries.data()
+                     << "plotArea=" << plotArea;
 
-        for (QAbstractSeries* aSeries : chartRate->series()) {
-
-            QList<QPointF> pts = qobject_cast<QLineSeries*>(aSeries)->points();
-
-            QColor seriesColor = qobject_cast<QLineSeries*>(aSeries)->color();
-
-            for (const QPointF& pt : pts) {
-
-                QPointF mapped = chartRate->mapToPosition(pt, aSeries);
-
-                QGraphicsTextItem* label = new QGraphicsTextItem(
-
-                    QString::number(pt.y(), 'f', 2), chartRate);
-
-                label->setFont(QFont("Arial", 8, QFont::Bold));
-
-                label->setDefaultTextColor(seriesColor);
-
-                label->setPos(mapped.x() - label->boundingRect().width() / 2, mapped.y() - 20);
-
+            if (!safeChart || !safeSeries) {
+                qDebug() << "[BarValueLabels] chart or series already destroyed, skip redraw";
+                return;
             }
 
-        }
+            QGraphicsScene* scene = safeChart->scene();
+            if (!scene) {
+                qDebug() << "[BarValueLabels] chart scene is null, skip redraw";
+                return;
+            }
+
+            const QList<QGraphicsItem*> items = scene->items();
+            for (QGraphicsItem* item : items) {
+                if (item && item->data(0) == QStringLiteral("customBarValueLabel")) {
+                    delete item;
+                }
+            }
+
+            const auto barSets = safeSeries->barSets();
+            qDebug() << "[BarValueLabels] bar set count=" << barSets.size();
+
+            for (QBarSet* set : barSets) {
+                if (!set) {
+                    qDebug() << "[BarValueLabels] encountered null QBarSet, skip";
+                    continue;
+                }
+
+                qDebug() << "[BarValueLabels] drawing set" << set->label() << "count=" << set->count();
+
+                for (int i = 0; i < set->count(); ++i) {
+                    QPointF valuePoint(i, set->at(i));
+                    qDebug() << "[BarValueLabels] before mapToPosition"
+                             << "set=" << set->label()
+                             << "index=" << i
+                             << "value=" << set->at(i)
+                             << "point=" << valuePoint;
+
+                    QPointF mapped = safeChart->mapToPosition(valuePoint, safeSeries);
+
+                    qDebug() << "[BarValueLabels] after mapToPosition"
+                             << "set=" << set->label()
+                             << "index=" << i
+                             << "mapped=" << mapped;
+
+                    QGraphicsSimpleTextItem* label = new QGraphicsSimpleTextItem(
+                        QString::number(set->at(i), 'f', decimals));
+                    label->setData(0, QStringLiteral("customBarValueLabel"));
+                    label->setFont(QFont("Arial", 8, QFont::Bold));
+                    label->setBrush(QBrush(set->labelColor()));
+                    label->setZValue(100);
+                    scene->addItem(label);
+
+                    qreal x = mapped.x() - label->boundingRect().width() / 2;
+                    qreal y = mapped.y() - label->boundingRect().height() - 6;
+                    label->setPos(x, y);
+                }
+            }
+        });
+
+        qDebug() << "[BarValueLabels] force initial redraw" << "chart=" << chart << "series=" << series;
+        chart->plotAreaChanged(chart->plotArea());
+    };
+
+    addBarValueLabels(chartRate, rateSeries, 2);
 
     // Style legend for both charts
     chartTrend->legend()->setLabelColor(QColor(234, 234, 234));
@@ -3034,42 +3088,28 @@ void Defect_Data_Display::updateTrendChart(
         // Y2 Count Line Series
 
         QLineSeries* seriesY2Count = new QLineSeries();
-
         seriesY2Count->setName("Y2");
-
         seriesY2Count->setPen(QPen(QColor(255, 105, 180), 2));
-
         seriesY2Count->setColor(QColor(255, 105, 180));
-
+        seriesY2Count->setPointsVisible(true);
+        seriesY2Count->setMarkerSize(4.0);
         seriesY2Count->setPointLabelsVisible(true);
-
         seriesY2Count->setPointLabelsFormat("@yPoint");
-
         seriesY2Count->setPointLabelsColor(QColor(255, 105, 180));
-
         seriesY2Count->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
-
-
 
         // Y2 Rate Line Series
 
         QLineSeries* seriesY2Rate = new QLineSeries();
-
         seriesY2Rate->setName("Y2");
-
         seriesY2Rate->setPen(QPen(QColor(255, 105, 180), 2));
-
         seriesY2Rate->setColor(QColor(255, 105, 180));
-
+        seriesY2Rate->setPointsVisible(true);
+        seriesY2Rate->setMarkerSize(4.0);
         seriesY2Rate->setPointLabelsVisible(true);
-
         seriesY2Rate->setPointLabelsFormat("@yPoint");
-
         seriesY2Rate->setPointLabelsColor(QColor(255, 105, 180));
-
         seriesY2Rate->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
-
-
 
         int idx = 0;
 
@@ -3084,8 +3124,6 @@ void Defect_Data_Display::updateTrendChart(
             idx++;
 
         }
-
-
 
         chartTrendY2->addSeries(seriesY2Count);
 
@@ -3164,10 +3202,6 @@ void Defect_Data_Display::updateTrendChart(
         seriesY2Rate->attachAxis(axisXRateY2);
 
         seriesY2Rate->attachAxis(axisYRateY2);
-
-
-
-        // Y2 rate point labels disabled for stability; keep only the line series.
 
     }
     qDebug() << "updateTrendChart completed with" << allGrades.size() << "grade series";
@@ -3414,34 +3448,69 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     detailTable->verticalHeader()->setVisible(false);
     detailTable->setShowGrid(false);
     detailTable->verticalHeader()->setDefaultSectionSize(36);
+    detailTable->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
+    detailTable->horizontalHeader()->setHighlightSections(false);
     detailTable->setStyleSheet(R"(
         QTableWidget {
             background-color: #16213e;
-            border: 1px solid #0f3460;
-            border-radius: 8px;
-            padding: 5px;
-            gridline-color: #0f3460;
+            border: 1px solid rgba(0, 217, 255, 60);
+            border-radius: 10px;
+            padding: 6px;
+            gridline-color: rgba(15, 52, 96, 180);
             color: #e0e0e0;
             font-size: 13px;
         }
         QTableWidget::item {
             padding: 8px 12px;
-            border-bottom: 1px solid #0f3460;
+            border-bottom: 1px solid rgba(15, 52, 96, 140);
+            background-color: transparent;
         }
         QTableWidget::item:selected {
-            background-color: #0f3460;
+            background-color: rgba(15, 52, 96, 220);
             color: #00d9ff;
+        }
+        QHeaderView {
+            background: transparent;
         }
         QHeaderView::section {
-            background-color: #0f3460;
-            color: #00d9ff;
+            background-color: #162131;
+            color: #183622;
             font-weight: bold;
             font-size: 13px;
-            padding: 10px;
+            padding: 10px 12px;
             border: none;
-            border-bottom: 2px solid #00d9ff;
+            border-right: 1px solid rgba(0, 217, 255, 35);
+            border-bottom: 2px solid rgba(0, 217, 255, 170);
+        }
+        QHeaderView::section:first {
+            border-top-left-radius: 8px;
+        }
+        QHeaderView::section:last {
+            border-top-right-radius: 8px;
+            border-right: none;
+        }
+        QHeaderView::up-arrow, QHeaderView::down-arrow {
+            image: none;
+            width: 0px;
+            height: 0px;
+        }
+        QTableCornerButton::section {
+            background-color: #16213e;
+            border: none;
+            border-bottom: 2px solid rgba(0, 217, 255, 170);
+            border-right: 1px solid rgba(0, 217, 255, 35);
         }
     )");
+
+    for (int col = 0; col < detailTable->columnCount(); ++col) {
+        QTableWidgetItem* headerItem = detailTable->horizontalHeaderItem(col);
+        if (headerItem) {
+            headerItem->setTextAlignment(Qt::AlignCenter);
+            headerItem->setForeground(QBrush(QColor("#28364f")));
+            headerItem->setBackground(QBrush(QColor("#16213e")));
+            headerItem->setFont(QFont("Microsoft YaHei", 10, QFont::Bold));
+        }
+    }
 
     for (int row = 0; row < sortedGrades.size(); ++row) {
         const QString& grade = sortedGrades[row];

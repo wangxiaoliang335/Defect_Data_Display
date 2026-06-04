@@ -994,107 +994,131 @@ QTabBar::tab:hover {
        </attribute>
        <layout class="QVBoxLayout" name="tabTrendLayout">
         <item>
-         <widget class="QLabel" name="sectionTitle5">
-          <property name="text">
-           <string>缺陷趋势图</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QWidget" name="chartTrend" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>200</height>
-           </size>
-          </property>
+         <widget class="QTabWidget" name="tabTrendPages">
           <property name="styleSheet">
-           <string>background-color: #16213e; border-radius: 8px;</string>
+           <string>QTabWidget::pane { border: 1px solid rgba(0, 217, 255, 60); border-radius: 8px; background-color: transparent; }
+QTabBar::tab { background-color: rgba(22, 33, 62, 180); color: #8aa2c7; border: 1px solid rgba(0, 217, 255, 40); border-bottom: none; padding: 8px 20px; min-width: 120px; }
+QTabBar::tab:selected { background-color: #16213e; color: #00d9ff; }
+QTabBar::tab:hover { color: #b8f6ff; }</string>
           </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="sectionTitle6">
-          <property name="text">
-           <string>缺陷率趋势</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QWidget" name="chartDefectRate" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>200</height>
-           </size>
-          </property>
-          <property name="styleSheet">
-           <string>background-color: #16213e; border-radius: 8px;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="sectionTitleY2Count">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>20</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Y2 数量趋势</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QWidget" name="chartTrendY2" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>180</height>
-           </size>
-          </property>
-          <property name="styleSheet">
-           <string>background-color: #16213e; border-radius: 8px;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QLabel" name="sectionTitleY2Rate">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>16777215</width>
-            <height>20</height>
-           </size>
-          </property>
-          <property name="text">
-           <string>Y2 比率趋势</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QWidget" name="chartDefectRateY2" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>200</height>
-           </size>
-          </property>
-          <property name="styleSheet">
-           <string>background-color: #16213e; border-radius: 8px;</string>
-          </property>
+          <widget class="QWidget" name="tabTrendPageBasic">
+           <attribute name="title">
+            <string>基础趋势</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="tabTrendPageBasicLayout">
+            <item>
+             <widget class="QLabel" name="sectionTitle5">
+              <property name="text">
+               <string>缺陷趋势图</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="chartTrend" native="true">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>260</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #16213e; border-radius: 8px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="sectionTitle6">
+              <property name="text">
+               <string>缺陷率趋势</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="chartDefectRate" native="true">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>260</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #16213e; border-radius: 8px;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+          <widget class="QWidget" name="tabTrendPageY2">
+           <attribute name="title">
+            <string>Y2 趋势</string>
+           </attribute>
+           <layout class="QVBoxLayout" name="tabTrendPageY2Layout">
+            <item>
+             <widget class="QLabel" name="sectionTitleY2Count">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Y2 数量趋势</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="chartTrendY2" native="true">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>260</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #16213e; border-radius: 8px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="sectionTitleY2Rate">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>16777215</width>
+                <height>20</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>Y2 比率趋势</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="chartDefectRateY2" native="true">
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>260</height>
+               </size>
+              </property>
+              <property name="styleSheet">
+               <string>background-color: #16213e; border-radius: 8px;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
          </widget>
         </item>
        </layout>
