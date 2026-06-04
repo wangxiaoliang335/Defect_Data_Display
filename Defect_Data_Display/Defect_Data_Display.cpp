@@ -2816,9 +2816,6 @@ void Defect_Data_Display::updateTrendChart(
     int colorIdx = 0;
     int maxCount = 1;
     QBarSeries* countSeries = new QBarSeries();
-    countSeries->setLabelsVisible(true);
-    countSeries->setLabelsFormat("@value");
-    countSeries->setLabelsPosition(QAbstractBarSeries::LabelsOutsideEnd);
 
     for (const QString& grade : basicGrades) {
         QBarSet* barSet = new QBarSet(grade);
@@ -2868,9 +2865,6 @@ void Defect_Data_Display::updateTrendChart(
     colorIdx = 0;
     double maxRate = 1.0;
     QBarSeries* rateSeries = new QBarSeries();
-    rateSeries->setLabelsVisible(true);
-    rateSeries->setLabelsFormat("@value");
-    rateSeries->setLabelsPosition(QAbstractBarSeries::LabelsOutsideEnd);
 
     for (const QString& grade : basicGrades) {
         QBarSet* barSet = new QBarSet(grade);
@@ -2984,6 +2978,7 @@ void Defect_Data_Display::updateTrendChart(
         chart->plotAreaChanged(chart->plotArea());
     };
 
+    addBarValueLabels(chartTrend, countSeries, 0);
     addBarValueLabels(chartRate, rateSeries, 2);
 
     // Style legend for both charts
