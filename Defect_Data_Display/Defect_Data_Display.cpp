@@ -6314,6 +6314,129 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
                     slice->setLabelColor(QColor("#e0f0ff"));
                     slice->setLabelFont(QFont("Arial", 10));
                     colorIdx++;
+
+                    // Click slice to show Code_AOI filtered detail dialog
+                    QString clickedCodeAOI = it.key();
+                    connect(slice, &QPieSlice::clicked, this, [=]() {
+                        QDialog filterDialog(this);
+                        filterDialog.setModal(true);
+                        filterDialog.resize(1200, 700);
+                        filterDialog.setWindowTitle(QString("等级: %1 / Code_AOI: %2").arg(gradeName).arg(clickedCodeAOI));
+                        filterDialog.setStyleSheet("QDialog { background-color: rgba(15, 25, 45, 230); color: #e0f0ff; }");
+
+                        QVBoxLayout* fLayout = new QVBoxLayout(&filterDialog);
+                        fLayout->setContentsMargins(15, 15, 15, 15);
+                        fLayout->setSpacing(10);
+
+                        // Time range filter for this sub-dialog
+                        QString fTimeRange = ui.comboTimeRange->currentText();
+                        QDate fDate = m_selectedDate;
+                        QString fDateStr = fDate.toString("yyyy-MM-dd");
+                        QString fTimeFilter;
+                        if (fTimeRange == "按小时" || fTimeRange == "按天") {
+                            fTimeFilter = QString(" AND DATE(StartTime) = '%1' ").arg(fDateStr);
+                        } else if (fTimeRange == "按月") {
+                            fTimeFilter = QString(" AND DATE_FORMAT(StartTime, '%Y-%m') = '%1' ").arg(fDateStr.left(7));
+                        }
+
+                        // Sub-query for this Code_AOI
+                        QString fConnName = QString("slicefilter_%1").arg(QDateTime::currentMSecsSinceEpoch());
+                        QSqlDatabase fDb = QSqlDatabase::addDatabase("QODBC", fConnName);
+                        fDb.setDatabaseName(chartConnStr);
+                        if (!fDb.open()) {
+                            QMessageBox::warning(this, "错误", "数据库连接失败");
+                            return;
+                        }
+
+                        QString fQueryStr = QString(
+                            "SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID "
+                            "FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND Code_AOI = '%2' %3 "
+                            "ORDER BY StartTime DESC LIMIT 500"
+                        ).arg(gradeName).arg(clickedCodeAOI).arg(fTimeFilter);
+
+                        QSqlQuery fQuery(fDb);
+                        QTableWidget* fTable = new QTableWidget(&filterDialog);
+                        fTable->setColumnCount(6);
+                        fTable->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
+                        fTable->setAlternatingRowColors(true);
+                        fTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+                        fTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+                        fTable->horizontalHeader()->setStretchLastSection(true);
+                        fTable->verticalHeader()->setVisible(false);
+                        fTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+                        fTable->verticalHeader()->setDefaultSectionSize(22);
+                        fTable->setStyleSheet(R"(
+                            QTableWidget {
+                                background-color: rgba(20, 35, 55, 220);
+                                alternate-background-color: rgba(30, 50, 80, 180);
+                                color: #e0f0ff;
+                                border: 1px solid rgba(0, 217, 255, 80);
+                                border-radius: 6px;
+                                gridline-color: rgba(0, 217, 255, 40);
+                                font-size: 13px;
+                            }
+                            QTableWidget::item { padding: 5px; }
+                            QTableWidget::item:selected { background-color: rgba(0, 150, 200, 150); color: #ffffff; }
+                            QHeaderView::section {
+                                background-color: rgba(0, 100, 150, 180);
+                                color: #ffffff; padding: 6px;
+                                border: 1px solid rgba(0, 217, 255, 60);
+                                font-weight: bold; font-size: 13px;
+                            }
+                        )");
+
+                        fLayout->addWidget(fTable);
+
+                        QObject::connect(fTable, &QTableWidget::cellDoubleClicked, this, [=](int fRow, int /*col*/) {
+                            QTableWidgetItem* fStartItem = fTable->item(fRow, 0);
+                            if (!fStartItem) return;
+                            QString fScreenId = fStartItem->data(Qt::UserRole).toString();
+                            QString fLocalIp = fStartItem->data(Qt::UserRole + 1).toString();
+                            int fPlatformId = fStartItem->data(Qt::UserRole + 2).toInt();
+                            QDateTime fStartTime = fStartItem->data(Qt::UserRole + 3).toDateTime();
+                            showInspectionImageDialog(fScreenId, fPlatformId, fLocalIp, fStartTime);
+                        });
+
+                        if (fQuery.exec(fQueryStr)) {
+                            fTable->setRowCount(0);
+                            while (fQuery.next()) {
+                                int fRow = fTable->rowCount();
+                                fTable->insertRow(fRow);
+                                for (int col = 0; col < 6; ++col) {
+                                    fTable->setItem(fRow, col, new QTableWidgetItem(fQuery.value(col).toString()));
+                                }
+                                QTableWidgetItem* fStartItem = fTable->item(fRow, 0);
+                                if (fStartItem) {
+                                    fStartItem->setData(Qt::UserRole, fQuery.value(1).toString());
+                                    fStartItem->setData(Qt::UserRole + 1, fQuery.value(6).toString());
+                                    fStartItem->setData(Qt::UserRole + 2, fQuery.value(7).toInt());
+                                    fStartItem->setData(Qt::UserRole + 3, fQuery.value(0).toDateTime());
+                                }
+                            }
+                        } else {
+                            QMessageBox::warning(&filterDialog, "错误", "查询失败: " + fQuery.lastError().text());
+                        }
+
+                        QSqlDatabase::removeDatabase(fConnName);
+
+                        QPushButton* fCloseBtn = new QPushButton("关闭", &filterDialog);
+                        fCloseBtn->setFixedWidth(100);
+                        fCloseBtn->setStyleSheet(R"(
+                            QPushButton {
+                                background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,120,170,180), stop:1 rgba(0,80,130,180));
+                                color: #ffffff; border: 1px solid rgba(0,217,255,100);
+                                border-radius: 6px; padding: 8px 20px; font-size: 13px; font-weight: bold;
+                            }
+                            QPushButton:hover { background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,160,220,220), stop:1 rgba(0,110,170,220)); border: 1px solid #00d9ff; }
+                        )");
+                        QHBoxLayout* fBtnLayout = new QHBoxLayout();
+                        fBtnLayout->addStretch();
+                        fBtnLayout->addWidget(fCloseBtn);
+                        fLayout->addLayout(fBtnLayout);
+                        QObject::connect(fCloseBtn, &QPushButton::clicked, &filterDialog, &QDialog::accept);
+
+                        filterDialog.exec();
+                    });
                 }
             pieSeries->setHoleSize(0.35);
 
