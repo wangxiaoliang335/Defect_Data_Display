@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1400</width>
-    <height>1083</height>
+    <height>1209</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -848,7 +848,7 @@ QWidget#centralWidget {
        </sizepolicy>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="tabPlatform">
        <attribute name="title">
@@ -988,85 +988,6 @@ QTabBar::tab:hover {
         </item>
        </layout>
       </widget>
-      <!-- Hidden: tabDefect -->
-      <!-- <widget class="QWidget" name="tabDefect">
-       <attribute name="title">
-        <string>缺陷分析</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="tabDefectLayout">
-        <item>
-         <widget class="QWidget" name="chartAoiDefect" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>400</height>
-           </size>
-          </property>
-          <property name="styleSheet">
-           <string>background-color: #16213e; border-radius: 8px;</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </widget> -->
-      <!-- Hidden: tabInspection -->
-      <!-- <widget class="QWidget" name="tabInspection">
-       <attribute name="title">
-        <string>检测结果</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="tabInspectionLayout">
-        <property name="spacing">
-         <number>2</number>
-        </property>
-        <item>
-         <widget class="QWidget" name="chartInspectionPass" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>250</height>
-           </size>
-          </property>
-          <property name="styleSheet">
-           <string>background-color: #16213e; border-radius: 8px;</string>
-          </property>
-         </widget>
-        </item>
-        <item>
-         <widget class="QWidget" name="chartInspectionFail" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>250</height>
-           </size>
-          </property>
-          <property name="styleSheet">
-           <string>background-color: #16213e; border-radius: 8px;</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </widget> -->
-      <!-- Hidden: tabMapping -->
-      <!-- <widget class="QWidget" name="tabMapping">
-       <attribute name="title">
-        <string>缺陷位置映射</string>
-       </attribute>
-       <layout class="QVBoxLayout" name="tabMappingLayout">
-        <item>
-         <widget class="QWidget" name="chartDefectMapping" native="true">
-          <property name="minimumSize">
-           <size>
-            <width>0</width>
-            <height>500</height>
-           </size>
-          </property>
-          <property name="styleSheet">
-           <string>background-color: #16213e; border-radius: 8px;</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </widget> -->
       <widget class="QWidget" name="tabTrend">
        <attribute name="title">
         <string>趋势分析</string>
@@ -1114,6 +1035,18 @@ QTabBar::tab:hover {
         </item>
         <item>
          <widget class="QLabel" name="sectionTitleY2Count">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>20</height>
+           </size>
+          </property>
           <property name="text">
            <string>Y2 数量趋势</string>
           </property>
@@ -1134,6 +1067,18 @@ QTabBar::tab:hover {
         </item>
         <item>
          <widget class="QLabel" name="sectionTitleY2Rate">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>20</height>
+           </size>
+          </property>
           <property name="text">
            <string>Y2 比率趋势</string>
           </property>

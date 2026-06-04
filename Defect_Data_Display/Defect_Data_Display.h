@@ -187,6 +187,7 @@ private:
     void updateLocationAbnormalChart(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void onDataLoaded_LocationAbnormal(const QMap<QString, QMap<int, int>>& abnormalByPeriod);
     void showBarClickDialog(int platformIdx, const QString& timeKey);
+    void showInspectionImageDialog(const QString& screenId, int platformId, const QString& localIp, const QDateTime& startTime);
     void showDetailPieDialog();
     void showGradeTypeDialog(const QString& gradeName);
     QMap<QString, QMap<int, int>> m_locationAbnormalData;  // time_period -> platform_id -> count

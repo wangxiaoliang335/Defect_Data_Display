@@ -27,8 +27,13 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QPixmap>
 #include <QTextStream>
 #include <algorithm>
+
+#define DEFAULT_MANUAL_MAIN_AOI_IMAGE_ROOT "D:\\MEMS_DFS_Data\\"
 
 Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     : QMainWindow(parent)
@@ -1152,15 +1157,19 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
     for (int i = 0; i < headers.size() && i < ui.searchResultTable->columnCount(); ++i)
         ui.searchResultTable->setHorizontalHeaderItem(i, new QTableWidgetItem(headers[i]));
 
-    // Connect table cell click to open Grade_AOI detail dialog
-    connect(ui.searchResultTable, &QTableWidget::cellClicked, this, [=](int row, int col) {
-        QTableWidgetItem* gradeItem = ui.searchResultTable->item(row, 1);  // Grade_AOI column (index 1)
-        if (gradeItem) {
-            QString gradeName = gradeItem->text();
-            if (!gradeName.isEmpty()) {
-                showGradeTypeDialog(gradeName);
-            }
+    // Connect table cell click to open image preview
+    disconnect(ui.searchResultTable, nullptr, this, nullptr);
+    connect(ui.searchResultTable, &QTableWidget::cellClicked, this, [=](int row, int /*col*/) {
+        QTableWidgetItem* timeItem = ui.searchResultTable->item(row, 4);
+        if (!timeItem) {
+            return;
         }
+
+        QString selectedScreenId = timeItem->data(Qt::UserRole).toString();
+        QString localIp = timeItem->data(Qt::UserRole + 1).toString();
+        int platformId = timeItem->data(Qt::UserRole + 2).toInt();
+        QDateTime startTime = timeItem->data(Qt::UserRole + 3).toDateTime();
+        showInspectionImageDialog(selectedScreenId, platformId, localIp, startTime);
     });
 
     // Query database for matching records (no time limit for QR search)
@@ -1179,10 +1188,11 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
             ir.StartTime,
             ir.AOIResult,
             ir.MarkID,
-            ir.StopTime
+            ir.StopTime,
+            ir.LocalIP
         FROM ivs_lcd_inspectionresult ir
         WHERE ir.ScreenID = '%1'
-        GROUP BY ir.Code_AOI, ir.Grade_AOI, ir.PlatformID, ir.AOIResult, ir.MarkID, ir.StopTime, DATE(ir.StartTime), HOUR(ir.StartTime)
+        GROUP BY ir.Code_AOI, ir.Grade_AOI, ir.PlatformID, ir.AOIResult, ir.MarkID, ir.StopTime, ir.LocalIP, DATE(ir.StartTime), HOUR(ir.StartTime)
         ORDER BY ir.StartTime DESC
         LIMIT 500
     )").arg(screenId);
@@ -1214,6 +1224,7 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
         QString aoiResult = query.value(5).toString();
         int markId = query.value(6).toInt();
         QDateTime stopTime = query.value(7).toDateTime();
+        QString localIp = query.value(8).toString();
 
         ui.searchResultTable->setItem(row, 0, new QTableWidgetItem(codeAoi));
         ui.searchResultTable->setItem(row, 1, new QTableWidgetItem(gradeAoi));
@@ -1223,6 +1234,10 @@ void Defect_Data_Display::performQrCodeSearch(const QString& screenId)
         QTableWidgetItem* timeItem = new QTableWidgetItem(startTime.toString("yyyy-MM-dd HH:mm:ss"));
         timeItem->setForeground(QBrush(QColor(100, 180, 220)));
         timeItem->setFont(QFont(ui.searchResultTable->font().family(), 12));
+        timeItem->setData(Qt::UserRole, screenId);
+        timeItem->setData(Qt::UserRole + 1, localIp);
+        timeItem->setData(Qt::UserRole + 2, platformId);
+        timeItem->setData(Qt::UserRole + 3, startTime);
         ui.searchResultTable->setItem(row, 4, timeItem);
 
         QTableWidgetItem* resultItem = new QTableWidgetItem(aoiResult);
@@ -1748,8 +1763,9 @@ void Defect_Data_Display::setupCharts()
     ((QChartView*)m_chartViewTrend)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
 
     QVBoxLayout* layoutTrend = new QVBoxLayout(ui.chartTrend);
-    layoutTrend->setContentsMargins(0, 0, 0, 0);
-    layoutTrend->addWidget((QChartView*)m_chartViewTrend);
+    layoutTrend->setContentsMargins(0, 0, 0, 2);
+    layoutTrend->setSpacing(2);
+    layoutTrend->addWidget((QChartView*)m_chartViewTrend, 2);
 
     QChart* chartDefectRate = new QChart();
     chartDefectRate->setTitle("Defect Rate Trend");
@@ -1764,8 +1780,9 @@ void Defect_Data_Display::setupCharts()
     ((QChartView*)m_chartViewDefectRate)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
 
     QVBoxLayout* layoutDefectRate = new QVBoxLayout(ui.chartDefectRate);
-    layoutDefectRate->setContentsMargins(0, 0, 0, 0);
-    layoutDefectRate->addWidget((QChartView*)m_chartViewDefectRate);
+    layoutDefectRate->setContentsMargins(0, 2, 0, 2);
+    layoutDefectRate->setSpacing(2);
+    layoutDefectRate->addWidget((QChartView*)m_chartViewDefectRate, 2);
 
     // Y2 Count Trend Chart
     QChart* chartTrendY2 = new QChart();
@@ -1777,12 +1794,13 @@ void Defect_Data_Display::setupCharts()
 
     m_chartViewTrendY2 = new QChartView(chartTrendY2);
     ((QChartView*)m_chartViewTrendY2)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewTrendY2)->setMinimumHeight(180);
+    ((QChartView*)m_chartViewTrendY2)->setMinimumHeight(235);
     ((QChartView*)m_chartViewTrendY2)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
 
     QVBoxLayout* layoutTrendY2 = new QVBoxLayout(ui.chartTrendY2);
-    layoutTrendY2->setContentsMargins(0, 0, 0, 0);
-    layoutTrendY2->addWidget((QChartView*)m_chartViewTrendY2);
+    layoutTrendY2->setContentsMargins(0, 2, 0, 2);
+    layoutTrendY2->setSpacing(2);
+    layoutTrendY2->addWidget((QChartView*)m_chartViewTrendY2, 2);
 
     // Y2 Rate Trend Chart
     QChart* chartDefectRateY2 = new QChart();
@@ -1794,12 +1812,13 @@ void Defect_Data_Display::setupCharts()
 
     m_chartViewDefectRateY2 = new QChartView(chartDefectRateY2);
     ((QChartView*)m_chartViewDefectRateY2)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewDefectRateY2)->setMinimumHeight(200);
+    ((QChartView*)m_chartViewDefectRateY2)->setMinimumHeight(235);
     ((QChartView*)m_chartViewDefectRateY2)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
 
     QVBoxLayout* layoutDefectRateY2 = new QVBoxLayout(ui.chartDefectRateY2);
-    layoutDefectRateY2->setContentsMargins(0, 0, 0, 0);
-    layoutDefectRateY2->addWidget((QChartView*)m_chartViewDefectRateY2);
+    layoutDefectRateY2->setContentsMargins(0, 2, 0, 0);
+    layoutDefectRateY2->setSpacing(2);
+    layoutDefectRateY2->addWidget((QChartView*)m_chartViewDefectRateY2, 2);
 
     // Create custom floating tooltip label for platform charts
     m_tooltipLabel = new QLabel(this);
@@ -5594,7 +5613,7 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
         // Use non-prepared statement to avoid ODBC issues
         // Only show non-OK records (defects)
         // Note: The table is ivs_lcd_inspectionresult, PlatformID is 0-based (0,1,2,3)
-        QString sql = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE PlatformID = %1 AND AOIResult != 'OK' AND %2 ORDER BY StartTime DESC LIMIT %3 OFFSET %4")
+        QString sql = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE PlatformID = %1 AND AOIResult != 'OK' AND %2 ORDER BY StartTime DESC LIMIT %3 OFFSET %4")
             .arg(platformIdx)
             .arg(timeFilter)
             .arg(pageSize)
@@ -5618,6 +5637,12 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
                 item->setTextAlignment(Qt::AlignCenter);
                 tableWidget->setItem(row, col, item);
             }
+
+            tableWidget->setRowHeight(row, 24);
+            tableWidget->item(row, 0)->setData(Qt::UserRole, query.value(1).toString());
+            tableWidget->item(row, 0)->setData(Qt::UserRole + 1, query.value(6).toString());
+            tableWidget->item(row, 0)->setData(Qt::UserRole + 2, query.value(7).toInt());
+            tableWidget->item(row, 0)->setData(Qt::UserRole + 3, query.value(0).toDateTime());
             ++row;
         }
 
@@ -5696,6 +5721,20 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
 
     // Load first page
     loadPageData(1);
+
+    // Connect pagination buttons
+    QObject::connect(tableWidget, &QTableWidget::cellDoubleClicked, this, [=](int row, int /*column*/) {
+        QTableWidgetItem* startItem = tableWidget->item(row, 0);
+        if (!startItem) {
+            return;
+        }
+
+        QString screenId = startItem->data(Qt::UserRole).toString();
+        QString localIp = startItem->data(Qt::UserRole + 1).toString();
+        int rowPlatformId = startItem->data(Qt::UserRole + 2).toInt();
+        QDateTime startTime = startItem->data(Qt::UserRole + 3).toDateTime();
+        showInspectionImageDialog(screenId, rowPlatformId, localIp, startTime);
+    });
 
     // Connect pagination buttons
     QObject::connect(prevBtn, &QPushButton::clicked, this, [&]() {
@@ -5820,6 +5859,66 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
 
     // Show dialog
     m_barClickDialog->exec();
+}
+
+void Defect_Data_Display::showInspectionImageDialog(const QString& screenId, int platformId, const QString& localIp, const QDateTime& startTime)
+{
+    QDialog dialog(this);
+    dialog.setModal(true);
+    dialog.resize(1100, 850);
+    dialog.setWindowTitle(QString("图片预览 - %1").arg(screenId));
+    dialog.setStyleSheet("QDialog { background-color: rgba(15, 25, 45, 235); color: #e0f0ff; }");
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
+    mainLayout->setContentsMargins(15, 15, 15, 15);
+    mainLayout->setSpacing(10);
+
+    QLabel* infoLabel = new QLabel(&dialog);
+    infoLabel->setWordWrap(true);
+    infoLabel->setStyleSheet("color: #9fdcff; font-size: 13px;");
+
+    QString platformFolder = QString::number(platformId + 1);
+    QString dateFolder = startTime.isValid() ? startTime.date().toString("yyyy-MM-dd") : m_selectedDate.toString("yyyy-MM-dd");
+    QString imageDir = QString::fromLocal8Bit(DEFAULT_MANUAL_MAIN_AOI_IMAGE_ROOT)
+        + QString("MainAOI/%1/%2/%3/%4")
+            .arg(localIp)
+            .arg(platformFolder)
+            .arg(dateFolder)
+            .arg(screenId);
+    QString imagePath = QDir::toNativeSeparators(QDir(imageDir).filePath("MarkImg.jpg"));
+
+    infoLabel->setText(QString("ScreenID: %1\n工位: %2\n路径: %3")
+        .arg(screenId)
+        .arg(platformId + 1)
+        .arg(imagePath));
+    mainLayout->addWidget(infoLabel);
+
+    QLabel* imageLabel = new QLabel(&dialog);
+    imageLabel->setAlignment(Qt::AlignCenter);
+    imageLabel->setMinimumSize(900, 680);
+    imageLabel->setStyleSheet("QLabel { background-color: #0f1a2d; border: 1px solid rgba(0, 217, 255, 80); border-radius: 6px; }");
+
+    QPixmap pixmap;
+    if (QFileInfo::exists(imagePath) && pixmap.load(imagePath)) {
+        imageLabel->setPixmap(pixmap.scaled(imageLabel->minimumSize(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    } else {
+        QPixmap emptyPixmap(imageLabel->minimumSize());
+        emptyPixmap.fill(QColor(20, 35, 55));
+        QPainter painter(&emptyPixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QColor(0, 217, 255));
+        painter.setFont(QFont("Microsoft YaHei", 20, QFont::Bold));
+        painter.drawText(emptyPixmap.rect(), Qt::AlignCenter, "暂无图片");
+        painter.end();
+        imageLabel->setPixmap(emptyPixmap);
+    }
+    mainLayout->addWidget(imageLabel, 1);
+
+    QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    mainLayout->addWidget(buttonBox);
+
+    dialog.exec();
 }
 
 void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
@@ -5953,6 +6052,19 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
 
     mainLayout->addWidget(tableWidget);
 
+    QObject::connect(tableWidget, &QTableWidget::cellDoubleClicked, this, [=](int row, int /*column*/) {
+        QTableWidgetItem* startItem = tableWidget->item(row, 0);
+        if (!startItem) {
+            return;
+        }
+
+        QString screenId = startItem->data(Qt::UserRole).toString();
+        QString localIp = startItem->data(Qt::UserRole + 1).toString();
+        int platformId = startItem->data(Qt::UserRole + 2).toInt();
+        QDateTime startTime = startItem->data(Qt::UserRole + 3).toDateTime();
+        showInspectionImageDialog(screenId, platformId, localIp, startTime);
+    });
+
     // Close button
     QPushButton* closeBtn = new QPushButton("关闭", &dialog);
     closeBtn->setFixedWidth(100);
@@ -5989,17 +6101,17 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
 
     QString queryStr;
     if (timeRange == "按小时") {
-        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE(StartTime) = '%2' ORDER BY StartTime DESC LIMIT 500")
+        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE(StartTime) = '%2' ORDER BY StartTime DESC LIMIT 500")
             .arg(gradeName).arg(dateStr);
     } else if (timeRange == "按天") {
-        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE(StartTime) = '%2' ORDER BY StartTime DESC LIMIT 500")
+        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE(StartTime) = '%2' ORDER BY StartTime DESC LIMIT 500")
             .arg(gradeName).arg(dateStr);
     } else if (timeRange == "按月") {
         QString monthStr = dateStr.left(7);
-        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE_FORMAT(StartTime, '%Y-%m') = '%2' ORDER BY StartTime DESC LIMIT 500")
+        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND DATE_FORMAT(StartTime, '%Y-%m') = '%2' ORDER BY StartTime DESC LIMIT 500")
             .arg(gradeName).arg(monthStr);
     } else {
-        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' ORDER BY StartTime DESC LIMIT 500")
+        queryStr = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' ORDER BY StartTime DESC LIMIT 500")
             .arg(gradeName);
     }
 
@@ -6011,6 +6123,14 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
             tableWidget->insertRow(row);
             for (int col = 0; col < 6; ++col) {
                 tableWidget->setItem(row, col, new QTableWidgetItem(query.value(col).toString()));
+            }
+
+            QTableWidgetItem* startItem = tableWidget->item(row, 0);
+            if (startItem) {
+                startItem->setData(Qt::UserRole, query.value(1).toString());
+                startItem->setData(Qt::UserRole + 1, query.value(6).toString());
+                startItem->setData(Qt::UserRole + 2, query.value(7).toInt());
+                startItem->setData(Qt::UserRole + 3, query.value(0).toDateTime());
             }
         }
     } else {
