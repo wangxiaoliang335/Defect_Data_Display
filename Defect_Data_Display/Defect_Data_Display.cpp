@@ -436,7 +436,7 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
                                         if (categoryIndex >= 0 && categoryIndex < categories.size()) {
                                             QString gradeName = categories[categoryIndex];
                                             qDebug() << "[DetailChart] Clicked at pos:" << me->pos() << "chartPos:" << chartPos << "bar index:" << barIndex << "categoryIndex:" << categoryIndex << "grade:" << gradeName;
-                                            showGradeTypeDialog(gradeName);
+                                            //showGradeTypeDialog(gradeName);
                                         }
                                     }
                                 }
@@ -725,6 +725,15 @@ void Defect_Data_Display::showDetailPieDialog()
     table->setColumnWidth(2, 150);
     rightLayout->addWidget(table, 6);
     contentLayout->addLayout(rightLayout, 3);
+
+    // Connect table cell click to show defect type detail dialog
+    QObject::connect(table, &QTableWidget::cellClicked, this, [=](int row, int /*column*/) {
+        if (row >= 0 && row < m_detailPieData.size()) {
+            QString defectType = m_detailPieData.keys().at(row);
+            qDebug() << "[PieDetailTable] Clicked row:" << row << "defect type:" << defectType;
+            showGradeTypeDialog(defectType);
+        }
+    });
 
     mainLayout->addLayout(contentLayout, 1);
 
@@ -5498,6 +5507,89 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
     QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
     mainLayout->setContentsMargins(15, 15, 15, 15);
     mainLayout->setSpacing(10);
+
+    // ========== Code_AOI Distribution Pie Chart ==========
+    // Query Code_AOI distribution for this grade
+    QSqlDatabase chartDb = QSqlDatabase::addDatabase("QODBC", "chartDist_" + QString::number(QDateTime::currentMSecsSinceEpoch()));
+    QString chartConnStr = "DRIVER={MySQL ODBC 5.3 ANSI Driver};SERVER=localhost;PORT=3306;DATABASE=ivs_lcd;UID=root;PWD=123456;OPTION=8;";
+    chartDb.setDatabaseName(chartConnStr);
+
+    if (chartDb.open()) {
+        // Build time range filter
+        QString timeRange = ui.comboTimeRange->currentText();
+        QDate selectedDate = m_selectedDate;
+        QString dateStr = selectedDate.toString("yyyy-MM-dd");
+        QString timeFilter;
+
+        if (timeRange == "按小时") {
+            timeFilter = QString(" AND DATE(StartTime) = '%1' ").arg(dateStr);
+        } else if (timeRange == "按天") {
+            timeFilter = QString(" AND DATE(StartTime) = '%1' ").arg(dateStr);
+        } else if (timeRange == "按月") {
+            QString monthStr = dateStr.left(7);
+            timeFilter = QString(" AND DATE_FORMAT(StartTime, '%Y-%m') = '%1' ").arg(monthStr);
+        }
+
+        // Query Code_AOI distribution
+        QString distQueryStr = QString("SELECT CASE WHEN Code_AOI IS NULL OR Code_AOI = '' THEN '空' ELSE Code_AOI END AS CodeAOI, COUNT(*) AS cnt "
+                                       "FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' %2 "
+                                       "GROUP BY Code_AOI ORDER BY cnt DESC")
+                                   .arg(gradeName).arg(timeFilter);
+
+        QSqlQuery distQuery(chartDb);
+        QMap<QString, qreal> pieData;
+        if (distQuery.exec(distQueryStr)) {
+            while (distQuery.next()) {
+                QString codeAOI = distQuery.value(0).toString();
+                qreal cnt = distQuery.value(1).toDouble();
+                pieData[codeAOI] = cnt;
+            }
+        }
+
+        // Create pie chart if we have data
+        if (!pieData.isEmpty()) {
+            QLabel* chartTitle = new QLabel("Code_AOI 分布", &dialog);
+            chartTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
+            chartTitle->setAlignment(Qt::AlignCenter);
+            mainLayout->addWidget(chartTitle);
+
+            QFrame* chartFrame = new QFrame(&dialog);
+            chartFrame->setFixedHeight(200);
+            chartFrame->setStyleSheet("QFrame { background-color: rgba(20, 35, 55, 200); border: 1px solid rgba(0, 217, 255, 60); border-radius: 6px; }");
+            QVBoxLayout* chartLayout = new QVBoxLayout(chartFrame);
+            chartLayout->setContentsMargins(5, 5, 5, 5);
+
+            QPieSeries* pieSeries = new QPieSeries();
+            QList<QString> colors = {"#00d9ff", "#ff6b6b", "#4ecdc4", "#ffe66d", "#a855f7", "#f97316", "#84cc16", "#ec4899"};
+            int colorIdx = 0;
+            for (auto it = pieData.constBegin(); it != pieData.constEnd(); ++it) {
+                QPieSlice* slice = pieSeries->append(QString("%1: %2").arg(it.key()).arg(it.value()), it.value());
+                slice->setColor(QColor(colors[colorIdx % colors.size()]));
+                slice->setLabelVisible(true);
+                slice->setLabelColor(QColor("#e0f0ff"));
+                slice->setLabelFont(QFont("Arial", 10));
+                colorIdx++;
+            }
+            pieSeries->setHoleSize(0.35);
+
+            QChart* pieChart = new QChart();
+            pieChart->addSeries(pieSeries);
+            pieChart->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+            pieChart->setAnimationOptions(QChart::NoAnimation);
+            pieChart->legend()->setVisible(true);
+            pieChart->legend()->setLabelColor(QColor("#e0f0ff"));
+
+            QChartView* chartView = new QChartView(pieChart);
+            chartView->setRenderHint(QPainter::Antialiasing);
+            chartView->setStyleSheet("background: transparent;");
+            chartLayout->addWidget(chartView);
+
+            mainLayout->addWidget(chartFrame);
+        }
+
+        chartDb.close();
+    }
+    QSqlDatabase::removeDatabase("chartDist_" + QString::number(QDateTime::currentMSecsSinceEpoch()));
 
     // Table widget
     QTableWidget* tableWidget = new QTableWidget(&dialog);
