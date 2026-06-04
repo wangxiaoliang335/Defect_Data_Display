@@ -2306,6 +2306,7 @@ void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap
 
     // Create one bar set per grade type
     QBarSeries* barSeries = new QBarSeries();
+    barSeries->setBarWidth(1.0);
     int colorIdx = 0;
     int maxVal = 0;
     for (const QString& grade : sortedGrades) {
@@ -2459,6 +2460,7 @@ void Defect_Data_Display::updateAoiDefectChart(const QMap<QString, QList<QPair<Q
     defectColors["Scratch"] = QColor(100, 255, 255);
 
     QBarSeries* series = new QBarSeries();
+    series->setBarWidth(1.0);
     series->setLabelsVisible(true);
     series->setLabelsFormat("@value");
     series->setLabelsPosition(QBarSeries::LabelsOutsideEnd);
@@ -2816,6 +2818,7 @@ void Defect_Data_Display::updateTrendChart(
     int colorIdx = 0;
     int maxCount = 1;
     QBarSeries* countSeries = new QBarSeries();
+    countSeries->setBarWidth(1.0);
 
     for (const QString& grade : basicGrades) {
         QBarSet* barSet = new QBarSet(grade);
@@ -2865,6 +2868,7 @@ void Defect_Data_Display::updateTrendChart(
     colorIdx = 0;
     double maxRate = 1.0;
     QBarSeries* rateSeries = new QBarSeries();
+    rateSeries->setBarWidth(1.0);
 
     for (const QString& grade : basicGrades) {
         QBarSet* barSet = new QBarSet(grade);
