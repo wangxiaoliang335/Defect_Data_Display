@@ -1744,7 +1744,7 @@ void Defect_Data_Display::setupCharts()
 
     m_chartViewTrend = new QChartView(chartTrend);
     ((QChartView*)m_chartViewTrend)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewTrend)->setMinimumHeight(280);
+    ((QChartView*)m_chartViewTrend)->setMinimumHeight(200);
     ((QChartView*)m_chartViewTrend)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
 
     QVBoxLayout* layoutTrend = new QVBoxLayout(ui.chartTrend);
@@ -1760,12 +1760,46 @@ void Defect_Data_Display::setupCharts()
 
     m_chartViewDefectRate = new QChartView(chartDefectRate);
     ((QChartView*)m_chartViewDefectRate)->setRenderHint(QPainter::Antialiasing);
-    ((QChartView*)m_chartViewDefectRate)->setMinimumHeight(280);
+    ((QChartView*)m_chartViewDefectRate)->setMinimumHeight(200);
     ((QChartView*)m_chartViewDefectRate)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
 
     QVBoxLayout* layoutDefectRate = new QVBoxLayout(ui.chartDefectRate);
     layoutDefectRate->setContentsMargins(0, 0, 0, 0);
     layoutDefectRate->addWidget((QChartView*)m_chartViewDefectRate);
+
+    // Y2 Count Trend Chart
+    QChart* chartTrendY2 = new QChart();
+    chartTrendY2->setTitle("Y2 Count Trend");
+    chartTrendY2->setAnimationOptions(QChart::NoAnimation);
+    chartTrendY2->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartTrendY2->setTitleBrush(QBrush(QColor(255, 105, 180)));
+    chartTrendY2->legend()->setLabelColor(QColor(234, 234, 234));
+
+    m_chartViewTrendY2 = new QChartView(chartTrendY2);
+    ((QChartView*)m_chartViewTrendY2)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewTrendY2)->setMinimumHeight(180);
+    ((QChartView*)m_chartViewTrendY2)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+
+    QVBoxLayout* layoutTrendY2 = new QVBoxLayout(ui.chartTrendY2);
+    layoutTrendY2->setContentsMargins(0, 0, 0, 0);
+    layoutTrendY2->addWidget((QChartView*)m_chartViewTrendY2);
+
+    // Y2 Rate Trend Chart
+    QChart* chartDefectRateY2 = new QChart();
+    chartDefectRateY2->setTitle("Y2 Rate Trend (%)");
+    chartDefectRateY2->setAnimationOptions(QChart::NoAnimation);
+    chartDefectRateY2->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+    chartDefectRateY2->setTitleBrush(QBrush(QColor(255, 105, 180)));
+    chartDefectRateY2->legend()->setLabelColor(QColor(234, 234, 234));
+
+    m_chartViewDefectRateY2 = new QChartView(chartDefectRateY2);
+    ((QChartView*)m_chartViewDefectRateY2)->setRenderHint(QPainter::Antialiasing);
+    ((QChartView*)m_chartViewDefectRateY2)->setMinimumHeight(200);
+    ((QChartView*)m_chartViewDefectRateY2)->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+
+    QVBoxLayout* layoutDefectRateY2 = new QVBoxLayout(ui.chartDefectRateY2);
+    layoutDefectRateY2->setContentsMargins(0, 0, 0, 0);
+    layoutDefectRateY2->addWidget((QChartView*)m_chartViewDefectRateY2);
 
     // Create custom floating tooltip label for platform charts
     m_tooltipLabel = new QLabel(this);
@@ -2027,7 +2061,33 @@ void Defect_Data_Display::onDataLoaded_DefectMapping(const QList<QPair<int, int>
 }
 
 void Defect_Data_Display::onDataLoaded_Trend(const QMap<QString, QMap<QString, int>>& trendData, const QMap<QString, QMap<QString, double>>& defectRates, const QStringList& allGrades)
-{
+    {
+
+    // Build m_trendDataY2 from the received trendData
+    m_trendDataY2.clear();
+    QMap<QString, int> totalPerPeriod;
+    for (auto periodIt = trendData.constBegin(); periodIt != trendData.constEnd(); ++periodIt) {
+        int periodTotal = 0;
+        for (auto gradeIt = periodIt.value().constBegin(); gradeIt != periodIt.value().constEnd(); ++gradeIt) {
+            periodTotal += gradeIt.value();
+        }
+        totalPerPeriod[periodIt.key()] = periodTotal;
+    }
+    for (auto periodIt = trendData.constBegin(); periodIt != trendData.constEnd(); ++periodIt) {
+        QString period = periodIt.key();
+        int y2Count = periodIt.value().value("Y2", 0);
+        int totalCount = totalPerPeriod.value(period, 0);
+        if (y2Count > 0 || totalCount > 0) {
+            m_trendDataY2[period] = qMakePair(y2Count, totalCount);
+        }
+    }
+    qDebug() << "[onDataLoaded_Trend] Built m_trendDataY2, entries:" << m_trendDataY2.size();
+    if (!m_trendDataY2.isEmpty()) {
+        for (auto it = m_trendDataY2.constBegin(); it != m_trendDataY2.constEnd(); ++it) {
+            qDebug() << "  Y2 period:" << it.key() << "y2:" << it.value().first << "total:" << it.value().second;
+        }
+    }
+
     qDebug() << "=== onDataLoaded_Trend called ===" << "data points:" << trendData.size() << "grades:" << allGrades;
 
     m_trendCache.trendDataByGrade = trendData;
@@ -2169,9 +2229,14 @@ void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap
 
     // Clear existing chart
     QChart* chart = ((QChartView*)m_chartViewTrend)->chart();
+    qDebug() << "[GradeTrend] chart ptr:" << chart << "series:" << chart->series().size() << "axes:" << chart->axes().size();
     chart->removeAllSeries();
-    for (auto axis : chart->axes()) {
+
+    QList<QAbstractAxis*> existingAxes = chart->axes();
+    qDebug() << "[GradeTrend] removing axes:" << existingAxes.size();
+    for (QAbstractAxis* axis : existingAxes) {
         chart->removeAxis(axis);
+        axis->deleteLater();
     }
 
     // Create one line series per grade type
@@ -2208,6 +2273,7 @@ void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap
     chart->legend()->setAlignment(Qt::AlignRight);
 
     // X axis (time periods)
+    qDebug() << "[GradeTrend] creating axes and attaching series";
     QBarCategoryAxis* axisX = new QBarCategoryAxis();
     axisX->append(timeLabels);
     axisX->setLabelsColor(QColor(234, 234, 234));
@@ -2232,6 +2298,7 @@ void Defect_Data_Display::updatePlatformGradeTrendChart(const QMap<QString, QMap
         series->attachAxis(axisX);
         series->attachAxis(axisY);
     }
+    qDebug() << "[GradeTrend] attached axes to series:" << chart->series().size();
 
     // Find max value for Y axis range
     int maxVal = 0;
@@ -2557,7 +2624,6 @@ void Defect_Data_Display::loadTrendData(const QString& timeRange)
         }
     }
 
-    qDebug() << "Trend query completed, periods:" << trendData.size() << "grades:" << allGrades;
 
     // Compute defect rate per grade (grade count / total count per period * 100)
     QMap<QString, QMap<QString, double>> defectRates;
@@ -2673,6 +2739,7 @@ void Defect_Data_Display::updateTrendChart(
     int maxCount = 1;
 
     for (const QString& grade : allGrades) {
+        if (grade == "Y2") continue;  // Y2 has its own chart
         QLineSeries* series = new QLineSeries();
         series->setName(grade);
         series->setPointLabelsVisible(true);
@@ -2731,10 +2798,11 @@ void Defect_Data_Display::updateTrendChart(
     double maxRate = 1.0;
 
     for (const QString& grade : allGrades) {
+        if (grade == "Y2") continue;  // Y2 has its own chart
         QLineSeries* series = new QLineSeries();
         series->setName(grade);
         series->setPointLabelsVisible(true);
-        series->setPointLabelsFormat("@yPoint");
+        series->setPointLabelsVisible(false);
         series->setPointLabelsColor(QColor(255, 255, 255));
         series->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
 
@@ -2779,6 +2847,33 @@ void Defect_Data_Display::updateTrendChart(
         series->attachAxis(axisYRate);
     }
 
+
+        // Add custom 2-decimal point labels for rate chart
+
+        for (QAbstractSeries* aSeries : chartRate->series()) {
+
+            QList<QPointF> pts = qobject_cast<QLineSeries*>(aSeries)->points();
+
+            QColor seriesColor = qobject_cast<QLineSeries*>(aSeries)->color();
+
+            for (const QPointF& pt : pts) {
+
+                QPointF mapped = chartRate->mapToPosition(pt, aSeries);
+
+                QGraphicsTextItem* label = new QGraphicsTextItem(
+
+                    QString::number(pt.y(), 'f', 2), chartRate);
+
+                label->setFont(QFont("Arial", 8, QFont::Bold));
+
+                label->setDefaultTextColor(seriesColor);
+
+                label->setPos(mapped.x() - label->boundingRect().width() / 2, mapped.y() - 20);
+
+            }
+
+        }
+
     // Style legend for both charts
     chartTrend->legend()->setLabelColor(QColor(234, 234, 234));
     chartTrend->legend()->setFont(QFont("Arial", 9));
@@ -2788,6 +2883,237 @@ void Defect_Data_Display::updateTrendChart(
     chartRate->legend()->setFont(QFont("Arial", 9));
     chartRate->legend()->setAlignment(Qt::AlignRight);
 
+    // ========== Y2 Count and Rate Trend ==========
+
+    if (m_chartViewTrendY2 && m_chartViewDefectRateY2 && !m_trendDataY2.isEmpty()) {
+
+        // Get chart pointers
+
+        QChart* chartTrendY2 = ((QChartView*)m_chartViewTrendY2)->chart();
+
+        QChart* chartRateY2 = ((QChartView*)m_chartViewDefectRateY2)->chart();
+
+
+
+        // COMPLETE cleanup: remove series, axes, AND our old custom text labels
+
+        chartTrendY2->removeAllSeries();
+
+        chartRateY2->removeAllSeries();
+
+        QList<QAbstractAxis*> trendY2Axes = chartTrendY2->axes();
+
+        QList<QAbstractAxis*> rateY2Axes = chartRateY2->axes();
+
+        qDebug() << "[Y2 Chart] cleanup axes trend/rate:" << trendY2Axes.size() << rateY2Axes.size();
+
+        // Remove all axes from both charts safely
+
+        for (QAbstractAxis* axis : trendY2Axes) {
+
+            chartTrendY2->removeAxis(axis);
+
+            axis->deleteLater();
+
+        }
+
+        for (QAbstractAxis* axis : rateY2Axes) {
+
+            chartRateY2->removeAxis(axis);
+
+            axis->deleteLater();
+
+        }
+
+
+
+        chartTrendY2->setTitle("Count Trend by Grade_AOI");
+        chartTrendY2->setAnimationOptions(QChart::AllAnimations);
+        chartTrendY2->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+        chartTrendY2->setTitleBrush(QBrush(QColor(0, 217, 255)));
+
+        chartRateY2->setTitle("Rate Trend by Grade_AOI (%)");
+        chartRateY2->setAnimationOptions(QChart::AllAnimations);
+        chartRateY2->setBackgroundBrush(QBrush(QColor(22, 33, 62)));
+        chartRateY2->setTitleBrush(QBrush(QColor(0, 217, 255)));
+
+        // Set plot area background to match chart background
+
+        chartTrendY2->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+
+        chartTrendY2->setPlotAreaBackgroundVisible(true);
+
+        chartRateY2->setPlotAreaBackgroundBrush(QBrush(QColor(22, 33, 62)));
+
+        chartRateY2->setPlotAreaBackgroundVisible(true);
+
+
+
+        qDebug() << "[Y2 Chart] Drawing Y2 charts, data points:" << m_trendDataY2.size();
+
+
+
+        QStringList y2Categories;
+
+        double maxY2Count = 0;
+
+        double maxY2Rate = 0;
+
+
+
+        for (auto it = m_trendDataY2.constBegin(); it != m_trendDataY2.constEnd(); ++it) {
+
+            y2Categories << it.key();
+
+            if (it.value().first > maxY2Count) maxY2Count = it.value().first;
+
+            double rate = (it.value().second > 0) ? (it.value().first * 100.0 / it.value().second) : 0;
+
+            if (rate > maxY2Rate) maxY2Rate = rate;
+
+        }
+
+
+
+        // Y2 Count Line Series
+
+        QLineSeries* seriesY2Count = new QLineSeries();
+
+        seriesY2Count->setName("Y2");
+
+        seriesY2Count->setPen(QPen(QColor(255, 105, 180), 2));
+
+        seriesY2Count->setColor(QColor(255, 105, 180));
+
+        seriesY2Count->setPointLabelsVisible(true);
+
+        seriesY2Count->setPointLabelsFormat("@yPoint");
+
+        seriesY2Count->setPointLabelsColor(QColor(255, 105, 180));
+
+        seriesY2Count->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
+
+
+
+        // Y2 Rate Line Series
+
+        QLineSeries* seriesY2Rate = new QLineSeries();
+
+        seriesY2Rate->setName("Y2");
+
+        seriesY2Rate->setPen(QPen(QColor(255, 105, 180), 2));
+
+        seriesY2Rate->setColor(QColor(255, 105, 180));
+
+        seriesY2Rate->setPointLabelsVisible(true);
+
+        seriesY2Rate->setPointLabelsFormat("@yPoint");
+
+        seriesY2Rate->setPointLabelsColor(QColor(255, 105, 180));
+
+        seriesY2Rate->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
+
+
+
+        int idx = 0;
+
+        for (auto it = m_trendDataY2.constBegin(); it != m_trendDataY2.constEnd(); ++it) {
+
+            seriesY2Count->append(idx, it.value().first);
+
+            double rate = (it.value().second > 0) ? (it.value().first * 100.0 / it.value().second) : 0;
+
+            seriesY2Rate->append(idx, rate);
+
+            idx++;
+
+        }
+
+
+
+        chartTrendY2->addSeries(seriesY2Count);
+
+
+
+        // X axis for Y2 count chart
+
+        QBarCategoryAxis* axisXTrendY2 = new QBarCategoryAxis();
+
+        axisXTrendY2->append(timeLabels);
+
+        axisXTrendY2->setLabelsColor(QColor(234, 234, 234));
+
+        chartTrendY2->addAxis(axisXTrendY2, Qt::AlignBottom);
+
+
+
+        // Y axis for Y2 count chart
+
+        QValueAxis* axisYTrendY2 = new QValueAxis();
+
+        axisYTrendY2->setTitleText("Count");
+
+        axisYTrendY2->setLabelFormat("%d");
+
+        axisYTrendY2->setLabelsColor(QColor(234, 234, 234));
+
+        axisYTrendY2->setTitleBrush(QBrush(QColor(0, 217, 255)));
+
+        axisYTrendY2->setRange(0, maxY2Count > 0 ? maxY2Count + maxY2Count * 0.25 : 1);
+
+        chartTrendY2->addAxis(axisYTrendY2, Qt::AlignLeft);
+
+
+
+        seriesY2Count->attachAxis(axisXTrendY2);
+
+        seriesY2Count->attachAxis(axisYTrendY2);
+
+
+
+        chartRateY2->addSeries(seriesY2Rate);
+
+
+
+        // X axis for Y2 rate chart
+
+        QBarCategoryAxis* axisXRateY2 = new QBarCategoryAxis();
+
+        axisXRateY2->append(timeLabels);
+
+        axisXRateY2->setLabelsColor(QColor(234, 234, 234));
+
+        chartRateY2->addAxis(axisXRateY2, Qt::AlignBottom);
+
+
+
+        // Y axis for Y2 rate chart
+
+        QValueAxis* axisYRateY2 = new QValueAxis();
+
+        axisYRateY2->setTitleText("Rate (%)");
+
+        axisYRateY2->setLabelFormat("%.2f");
+
+        axisYRateY2->setLabelsColor(QColor(234, 234, 234));
+
+        axisYRateY2->setTitleBrush(QBrush(QColor(0, 217, 255)));
+
+        axisYRateY2->setRange(0, maxY2Rate > 0 ? maxY2Rate * 1.3 : 1);
+
+        chartRateY2->addAxis(axisYRateY2, Qt::AlignLeft);
+
+
+
+        seriesY2Rate->attachAxis(axisXRateY2);
+
+        seriesY2Rate->attachAxis(axisYRateY2);
+
+
+
+        // Y2 rate point labels disabled for stability; keep only the line series.
+
+    }
     qDebug() << "updateTrendChart completed with" << allGrades.size() << "grade series";
 }
 

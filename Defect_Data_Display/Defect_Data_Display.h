@@ -102,6 +102,9 @@ private:
     void* m_chartViewDefectMapping;
     void* m_chartViewTrend;
     void* m_chartViewDefectRate;
+    void* m_chartViewTrendY2;
+    void* m_chartViewDefectRateY2;
+    QMap<QString, QPair<int, int>> m_trendDataY2;
     QChartView* m_chartViewPlatform0;
     QChartView* m_chartViewPlatform1;
     QChartView* m_chartViewPlatform2;

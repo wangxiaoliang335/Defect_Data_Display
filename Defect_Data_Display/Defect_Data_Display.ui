@@ -1084,7 +1084,7 @@ QTabBar::tab:hover {
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>300</height>
+            <height>200</height>
            </size>
           </property>
           <property name="styleSheet">
@@ -1104,7 +1104,47 @@ QTabBar::tab:hover {
           <property name="minimumSize">
            <size>
             <width>0</width>
-            <height>300</height>
+            <height>200</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="sectionTitleY2Count">
+          <property name="text">
+           <string>Y2 数量趋势</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartTrendY2" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>180</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string>background-color: #16213e; border-radius: 8px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="sectionTitleY2Rate">
+          <property name="text">
+           <string>Y2 比率趋势</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QWidget" name="chartDefectRateY2" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>0</width>
+            <height>200</height>
            </size>
           </property>
           <property name="styleSheet">
