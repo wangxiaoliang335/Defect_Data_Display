@@ -3103,10 +3103,7 @@ void Defect_Data_Display::updateTrendChart(
         seriesY2Rate->setColor(QColor(255, 105, 180));
         seriesY2Rate->setPointsVisible(true);
         seriesY2Rate->setMarkerSize(4.0);
-        seriesY2Rate->setPointLabelsVisible(true);
-        seriesY2Rate->setPointLabelsFormat("@yPoint");
-        seriesY2Rate->setPointLabelsColor(QColor(255, 105, 180));
-        seriesY2Rate->setPointLabelsFont(QFont("Arial", 8, QFont::Bold));
+        // Use custom point labels (see addLineSeriesPointLabels below) for fixed 2-decimal formatting
 
         int idx = 0;
 
@@ -3199,6 +3196,53 @@ void Defect_Data_Display::updateTrendChart(
         seriesY2Rate->attachAxis(axisXRateY2);
 
         seriesY2Rate->attachAxis(axisYRateY2);
+
+        // Custom point labels for Y2 rate chart with fixed 2-decimal format
+        const auto addLineSeriesPointLabels = [this](QChart* chart, QLineSeries* series) {
+            QPointer<QChart> safeChart(chart);
+            QPointer<QLineSeries> safeSeries(series);
+
+            QObject::connect(chart, &QChart::plotAreaChanged, this, [safeChart, safeSeries](const QRectF&) {
+                if (!safeChart || !safeSeries) return;
+
+                QGraphicsScene* scene = safeChart->scene();
+                if (!scene) return;
+
+                const QList<QGraphicsItem*> items = scene->items();
+                for (QGraphicsItem* item : items) {
+                    if (item && item->data(0) == QStringLiteral("customLinePointLabel")) {
+                        delete item;
+                    }
+                }
+
+                const auto points = safeSeries->points();
+                for (const QPointF& pt : points) {
+                    QPointF mapped = safeChart->mapToPosition(pt, safeSeries);
+                    QGraphicsSimpleTextItem* label = new QGraphicsSimpleTextItem(
+                        QString::number(pt.y(), 'f', 2));
+                    label->setData(0, QStringLiteral("customLinePointLabel"));
+                    label->setFont(QFont("Arial", 8, QFont::Bold));
+                    label->setBrush(QBrush(QColor(255, 105, 180)));
+                    label->setZValue(100);
+                    scene->addItem(label);
+                    qreal x = mapped.x() - label->boundingRect().width() / 2;
+                    qreal y = mapped.y() - label->boundingRect().height() - 6;
+                    label->setPos(x, y);
+                }
+            });
+
+            chart->plotAreaChanged(chart->plotArea());
+        };
+
+        addLineSeriesPointLabels(chartRateY2, seriesY2Rate);
+
+        chartTrendY2->legend()->setLabelColor(QColor(234, 234, 234));
+        chartTrendY2->legend()->setFont(QFont("Arial", 9));
+        chartTrendY2->legend()->setAlignment(Qt::AlignRight);
+
+        chartRateY2->legend()->setLabelColor(QColor(234, 234, 234));
+        chartRateY2->legend()->setFont(QFont("Arial", 9));
+        chartRateY2->legend()->setAlignment(Qt::AlignRight);
 
     }
     qDebug() << "updateTrendChart completed with" << allGrades.size() << "grade series";
