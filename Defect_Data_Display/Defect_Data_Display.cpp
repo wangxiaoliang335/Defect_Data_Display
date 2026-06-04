@@ -6269,30 +6269,52 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
             }
         }
 
-        // Create pie chart if we have data
-        if (!pieData.isEmpty()) {
-            QLabel* chartTitle = new QLabel("Code_AOI 分布", &dialog);
-            chartTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
-            chartTitle->setAlignment(Qt::AlignCenter);
-            mainLayout->addWidget(chartTitle);
+        // Query total count and this grade's ratio
+        QString totalQueryStr = QString("SELECT COUNT(*) FROM ivs_lcd_inspectionresult WHERE 1=1 %1").arg(timeFilter);
+        QSqlQuery totalQuery(chartDb);
+        qreal totalAll = 0;
+        if (totalQuery.exec(totalQueryStr) && totalQuery.next()) {
+            totalAll = totalQuery.value(0).toDouble();
+        }
 
-            QFrame* chartFrame = new QFrame(&dialog);
-            chartFrame->setFixedHeight(200);
-            chartFrame->setStyleSheet("QFrame { background-color: rgba(20, 35, 55, 200); border: 1px solid rgba(0, 217, 255, 60); border-radius: 6px; }");
-            QVBoxLayout* chartLayout = new QVBoxLayout(chartFrame);
-            chartLayout->setContentsMargins(5, 5, 5, 5);
+        qreal gradeTotal = 0;
+        for (auto it = pieData.constBegin(); it != pieData.constEnd(); ++it) {
+            gradeTotal += it.value();
+        }
+        qreal gradeRatio = totalAll > 0 ? (gradeTotal / totalAll * 100) : 0;
 
-            QPieSeries* pieSeries = new QPieSeries();
-            QList<QString> colors = {"#00d9ff", "#ff6b6b", "#4ecdc4", "#ffe66d", "#a855f7", "#f97316", "#84cc16", "#ec4899"};
-            int colorIdx = 0;
+            // Calculate total for percentage
+            qreal total = 0;
             for (auto it = pieData.constBegin(); it != pieData.constEnd(); ++it) {
-                QPieSlice* slice = pieSeries->append(QString("%1: %2").arg(it.key()).arg(it.value()), it.value());
-                slice->setColor(QColor(colors[colorIdx % colors.size()]));
-                slice->setLabelVisible(true);
-                slice->setLabelColor(QColor("#e0f0ff"));
-                slice->setLabelFont(QFont("Arial", 10));
-                colorIdx++;
+                total += it.value();
             }
+
+            // Create pie chart if we have data
+            if (!pieData.isEmpty()) {
+                QLabel* chartTitle = new QLabel(QString("Code_AOI 分布 (等级占比: %1%)").arg(gradeRatio, 0, 'f', 2), &dialog);
+                chartTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
+                chartTitle->setAlignment(Qt::AlignCenter);
+                mainLayout->addWidget(chartTitle);
+
+                QFrame* chartFrame = new QFrame(&dialog);
+                chartFrame->setFixedHeight(200);
+                chartFrame->setStyleSheet("QFrame { background-color: rgba(20, 35, 55, 200); border: 1px solid rgba(0, 217, 255, 60); border-radius: 6px; }");
+                QVBoxLayout* chartLayout = new QVBoxLayout(chartFrame);
+                chartLayout->setContentsMargins(5, 5, 5, 5);
+
+                QPieSeries* pieSeries = new QPieSeries();
+                QList<QString> colors = {"#00d9ff", "#ff6b6b", "#4ecdc4", "#ffe66d", "#a855f7", "#f97316", "#84cc16", "#ec4899"};
+                int colorIdx = 0;
+                for (auto it = pieData.constBegin(); it != pieData.constEnd(); ++it) {
+                    qreal percentage = total > 0 ? (it.value() / total * 100) : 0;
+                    qreal finalPercentage = gradeRatio * percentage / 100;
+                    QPieSlice* slice = pieSeries->append(QString("%1: %2 (%3%)").arg(it.key()).arg(it.value()).arg(finalPercentage, 0, 'f', 2), it.value());
+                    slice->setColor(QColor(colors[colorIdx % colors.size()]));
+                    slice->setLabelVisible(true);
+                    slice->setLabelColor(QColor("#e0f0ff"));
+                    slice->setLabelFont(QFont("Arial", 10));
+                    colorIdx++;
+                }
             pieSeries->setHoleSize(0.35);
 
             QChart* pieChart = new QChart();
