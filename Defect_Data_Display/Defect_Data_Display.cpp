@@ -6165,6 +6165,7 @@ void Defect_Data_Display::showInspectionImageDialog(const QString& screenId, int
     dialog.setModal(true);
     dialog.resize(1100, 850);
     dialog.setWindowTitle(QString("图片预览 - %1").arg(screenId));
+    dialog.setWindowFlags(dialog.windowFlags() | Qt::WindowMaximizeButtonHint | Qt::WindowSystemMenuHint);
     dialog.setStyleSheet("QDialog { background-color: rgba(15, 25, 45, 235); color: #e0f0ff; }");
 
     QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
@@ -6191,26 +6192,55 @@ void Defect_Data_Display::showInspectionImageDialog(const QString& screenId, int
         .arg(imagePath));
     mainLayout->addWidget(infoLabel);
 
-    QLabel* imageLabel = new QLabel(&dialog);
-    imageLabel->setAlignment(Qt::AlignCenter);
-    imageLabel->setMinimumSize(900, 680);
-    imageLabel->setStyleSheet("QLabel { background-color: #0f1a2d; border: 1px solid rgba(0, 217, 255, 80); border-radius: 6px; }");
+    QGraphicsView* imageView = new QGraphicsView(&dialog);
+    imageView->setMinimumSize(900, 680);
+    imageView->setAlignment(Qt::AlignCenter);
+    imageView->setStyleSheet("QGraphicsView { background-color: #0f1a2d; border: 1px solid rgba(0, 217, 255, 80); border-radius: 6px; }");
+    imageView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    imageView->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    imageView->setRenderHint(QPainter::Antialiasing);
+    imageView->setRenderHint(QPainter::SmoothPixmapTransform);
+
+    QGraphicsScene* imageScene = new QGraphicsScene(imageView);
+    imageView->setScene(imageScene);
 
     QPixmap pixmap;
-    if (QFileInfo::exists(imagePath) && pixmap.load(imagePath)) {
-        imageLabel->setPixmap(pixmap.scaled(imageLabel->minimumSize(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    } else {
-        QPixmap emptyPixmap(imageLabel->minimumSize());
-        emptyPixmap.fill(QColor(20, 35, 55));
-        QPainter painter(&emptyPixmap);
+    if (!QFileInfo::exists(imagePath) || !pixmap.load(imagePath)) {
+        pixmap = QPixmap(900, 680);
+        pixmap.fill(QColor(20, 35, 55));
+        QPainter painter(&pixmap);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(QColor(0, 217, 255));
         painter.setFont(QFont("Microsoft YaHei", 20, QFont::Bold));
-        painter.drawText(emptyPixmap.rect(), Qt::AlignCenter, "暂无图片");
-        painter.end();
-        imageLabel->setPixmap(emptyPixmap);
+        painter.drawText(pixmap.rect(), Qt::AlignCenter, "暂无图片");
     }
-    mainLayout->addWidget(imageLabel, 1);
+
+    QGraphicsPixmapItem* pixmapItem = imageScene->addPixmap(pixmap);
+    imageScene->setSceneRect(pixmap.rect());
+
+    class ResizeFilter : public QObject {
+    public:
+        ResizeFilter(QGraphicsView* view, QGraphicsScene* scene, QGraphicsPixmapItem* item)
+            : QObject(view), m_view(view), m_scene(scene), m_item(item) {}
+
+    protected:
+        bool eventFilter(QObject* watched, QEvent* event) override {
+            if (watched == m_view && (event->type() == QEvent::Resize || event->type() == QEvent::Show)) {
+                if (m_item && !m_item->pixmap().isNull()) {
+                    m_view->fitInView(m_item, Qt::KeepAspectRatio);
+                }
+            }
+            return QObject::eventFilter(watched, event);
+        }
+
+    private:
+        QGraphicsView* m_view;
+        QGraphicsScene* m_scene;
+        QGraphicsPixmapItem* m_item;
+    };
+
+    imageView->installEventFilter(new ResizeFilter(imageView, imageScene, pixmapItem));
+    mainLayout->addWidget(imageView, 1);
 
     QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
