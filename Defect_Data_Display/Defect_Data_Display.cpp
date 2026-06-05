@@ -6199,7 +6199,7 @@ void Defect_Data_Display::showInspectionImageDialog(const QString& screenId, int
     imageView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     imageView->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     imageView->setRenderHint(QPainter::Antialiasing);
-    imageView->setRenderHint(QPainter::SmoothPixmapTransform);
+    imageView->setDragMode(QGraphicsView::NoDrag);
 
     QGraphicsScene* imageScene = new QGraphicsScene(imageView);
     imageView->setScene(imageScene);
@@ -6218,28 +6218,56 @@ void Defect_Data_Display::showInspectionImageDialog(const QString& screenId, int
     QGraphicsPixmapItem* pixmapItem = imageScene->addPixmap(pixmap);
     imageScene->setSceneRect(pixmap.rect());
 
-    class ResizeFilter : public QObject {
+    class ImageViewInteractionFilter : public QObject {
     public:
-        ResizeFilter(QGraphicsView* view, QGraphicsScene* scene, QGraphicsPixmapItem* item)
-            : QObject(view), m_view(view), m_scene(scene), m_item(item) {}
+        ImageViewInteractionFilter(QGraphicsView* view, QGraphicsPixmapItem* item)
+            : QObject(view), m_view(view), m_item(item), m_manualZoom(false) {}
 
     protected:
         bool eventFilter(QObject* watched, QEvent* event) override {
-            if (watched == m_view && (event->type() == QEvent::Resize || event->type() == QEvent::Show)) {
-                if (m_item && !m_item->pixmap().isNull()) {
-                    m_view->fitInView(m_item, Qt::KeepAspectRatio);
-                }
+            if (watched != m_view || !m_item || m_item->pixmap().isNull()) {
+                return QObject::eventFilter(watched, event);
             }
+
+            if (event->type() == QEvent::Show || event->type() == QEvent::Resize) {
+                if (!m_manualZoom) {
+                    fitToView();
+                }
+            } else if (event->type() == QEvent::Wheel) {
+                QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
+                const qreal scaleFactor = wheelEvent->angleDelta().y() > 0 ? 1.15 : (1.0 / 1.15);
+                m_view->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+                m_view->scale(scaleFactor, scaleFactor);
+                m_manualZoom = true;
+                updateDragMode();
+                return true;
+            } else if (event->type() == QEvent::MouseButtonDblClick) {
+                fitToView();
+                m_manualZoom = false;
+                updateDragMode();
+                return true;
+            }
+
             return QObject::eventFilter(watched, event);
         }
 
     private:
+        void fitToView() {
+            m_view->resetTransform();
+            m_view->fitInView(m_item, Qt::KeepAspectRatio);
+        }
+
+        void updateDragMode() {
+            m_view->setDragMode(m_manualZoom ? QGraphicsView::ScrollHandDrag : QGraphicsView::NoDrag);
+            m_view->viewport()->setCursor(m_manualZoom ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        }
+
         QGraphicsView* m_view;
-        QGraphicsScene* m_scene;
         QGraphicsPixmapItem* m_item;
+        bool m_manualZoom;
     };
 
-    imageView->installEventFilter(new ResizeFilter(imageView, imageScene, pixmapItem));
+    imageView->installEventFilter(new ImageViewInteractionFilter(imageView, pixmapItem));
     mainLayout->addWidget(imageView, 1);
 
     QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, &dialog);
