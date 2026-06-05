@@ -101,9 +101,25 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
             this, &Defect_Data_Display::onTimeRangeChangedForSearch);
     connect(ui.timeEditStart, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         m_searchStartHour = ui.timeEditStart->currentIndex();
+        if (ui.comboTimeRange->currentText() == "按小时") {
+            int currentTab = ui.tabWidget->currentIndex();
+            if (currentTab == 1) {
+                loadTrendDataAsync(ui.comboTimeRange->currentText());
+            } else if (currentTab == 2) {
+                loadDetailDataAsync(ui.comboTimeRange->currentText());
+            }
+        }
     });
     connect(ui.timeEditEnd, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         m_searchEndHour = ui.timeEditEnd->currentIndex();
+        if (ui.comboTimeRange->currentText() == "按小时") {
+            int currentTab = ui.tabWidget->currentIndex();
+            if (currentTab == 1) {
+                loadTrendDataAsync(ui.comboTimeRange->currentText());
+            } else if (currentTab == 2) {
+                loadDetailDataAsync(ui.comboTimeRange->currentText());
+            }
+        }
     });
     connect(ui.btnMinimize, &QPushButton::clicked, this, &Defect_Data_Display::onMinimizeClicked);
     connect(ui.btnClose, &QPushButton::clicked, this, &Defect_Data_Display::onCloseClicked);
@@ -2151,6 +2167,8 @@ void Defect_Data_Display::onDataLoaded_Trend(const QMap<QString, QMap<QString, i
     m_trendCache.allGrades = allGrades;
     m_trendCache.timeRange = ui.comboTimeRange->currentText();
     m_trendCache.date = m_selectedDate;
+    m_trendCache.startHour = (ui.comboTimeRange->currentText() == "按小时") ? qMin(m_searchStartHour, m_searchEndHour) : -1;
+    m_trendCache.endHour = (ui.comboTimeRange->currentText() == "按小时") ? qMax(m_searchStartHour, m_searchEndHour) : -1;
     m_trendCache.timestamp = QDateTime::currentMSecsSinceEpoch();
 
     updateTrendChart(trendData, defectRates, allGrades, ui.comboTimeRange->currentText());
@@ -2163,6 +2181,8 @@ void Defect_Data_Display::onDataLoaded_Detail(const QList<QVariantList>& defectD
     m_detailCache.defectDetails = defectDetails;
     m_detailCache.timeRange = ui.comboTimeRange->currentText();
     m_detailCache.date = m_selectedDate;
+    m_detailCache.startHour = (ui.comboTimeRange->currentText() == "按小时") ? qMin(m_searchStartHour, m_searchEndHour) : -1;
+    m_detailCache.endHour = (ui.comboTimeRange->currentText() == "按小时") ? qMax(m_searchStartHour, m_searchEndHour) : -1;
     m_detailCache.timestamp = QDateTime::currentMSecsSinceEpoch();
 
     qDebug() << "onDataLoaded_Detail: about to call updateDetailTable";
@@ -2397,8 +2417,13 @@ QString Defect_Data_Display::getTimeFilterClause(const QString& timeRange)
 QString Defect_Data_Display::getDateTimeRange(const QString& timeRange)
 {
     if (timeRange == "按小时") {
-        return QString("StartTime >= '%1 00:00:00' AND StartTime <= '%1 23:59:59'")
-            .arg(m_selectedDate.toString("yyyy-MM-dd"));
+        const int startHour = qMin(m_searchStartHour, m_searchEndHour);
+        const int endHour = qMax(m_searchStartHour, m_searchEndHour);
+        const QString dateStr = m_selectedDate.toString("yyyy-MM-dd");
+        return QString("StartTime >= '%1 %2:00:00' AND StartTime <= '%1 %3:59:59'")
+            .arg(dateStr)
+            .arg(startHour, 2, 10, QChar('0'))
+            .arg(endHour, 2, 10, QChar('0'));
     } else if (timeRange == "按天") {
         int year = m_selectedDate.year();
         int month = m_selectedDate.month();
@@ -2409,8 +2434,9 @@ QString Defect_Data_Display::getDateTimeRange(const QString& timeRange)
         return QString("StartTime >= '%1-01-01' AND StartTime < '%2-01-01'")
             .arg(year).arg(year + 1);
     }
+    const QString dateStr = m_selectedDate.toString("yyyy-MM-dd");
     return QString("StartTime >= '%1 00:00:00' AND StartTime <= '%1 23:59:59'")
-        .arg(m_selectedDate.toString("yyyy-MM-dd"));
+        .arg(dateStr);
 }
 
 void Defect_Data_Display::updateStats(int totalInspect, int passCount, int failCount, double passRate, int totalDefects)
@@ -4953,6 +4979,13 @@ bool Defect_Data_Display::isCacheValid(CachedTabData* cache, const QString& time
     }
     if (cache->timeRange != timeRange) {
         return false;
+    }
+    if (timeRange == "按小时") {
+        const int startHour = qMin(m_searchStartHour, m_searchEndHour);
+        const int endHour = qMax(m_searchStartHour, m_searchEndHour);
+        if (cache->startHour != startHour || cache->endHour != endHour) {
+            return false;
+        }
     }
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (now - cache->timestamp > 60000) {
