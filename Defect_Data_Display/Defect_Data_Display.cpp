@@ -6228,8 +6228,8 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
     dialog.setWindowTitle(QString("等级类型: %1").arg(gradeName));
 
     QVBoxLayout* mainLayout = new QVBoxLayout(&dialog);
-    mainLayout->setContentsMargins(15, 15, 15, 15);
-    mainLayout->setSpacing(10);
+    mainLayout->setContentsMargins(8, 8, 8, 8);
+    mainLayout->setSpacing(4);
 
     // ========== Code_AOI Distribution Pie Chart ==========
     // Query Code_AOI distribution for this grade
@@ -6292,15 +6292,16 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
             // Create pie chart if we have data
             if (!pieData.isEmpty()) {
                 QLabel* chartTitle = new QLabel(QString("Code_AOI 分布 (等级占比: %1%)").arg(gradeRatio, 0, 'f', 2), &dialog);
-                chartTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold;");
+                chartTitle->setStyleSheet("color: #00d9ff; font-size: 14px; font-weight: bold; padding: 0px; margin: 0px;");
                 chartTitle->setAlignment(Qt::AlignCenter);
-                mainLayout->addWidget(chartTitle);
+                mainLayout->addWidget(chartTitle, 0, Qt::AlignTop);
 
                 QFrame* chartFrame = new QFrame(&dialog);
-                chartFrame->setFixedHeight(200);
+                chartFrame->setFixedHeight(680);
                 chartFrame->setStyleSheet("QFrame { background-color: rgba(20, 35, 55, 200); border: 1px solid rgba(0, 217, 255, 60); border-radius: 6px; }");
                 QVBoxLayout* chartLayout = new QVBoxLayout(chartFrame);
-                chartLayout->setContentsMargins(5, 5, 5, 5);
+                chartLayout->setContentsMargins(4, 4, 4, 4);
+                chartLayout->setSpacing(2);
 
                 QPieSeries* pieSeries = new QPieSeries();
                 QList<QString> colors = {"#00d9ff", "#ff6b6b", "#4ecdc4", "#ffe66d", "#a855f7", "#f97316", "#84cc16", "#ec4899"};
@@ -6447,12 +6448,13 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
             pieChart->legend()->setVisible(true);
             pieChart->legend()->setLabelColor(QColor("#e0f0ff"));
 
-            QChartView* chartView = new QChartView(pieChart);
-            chartView->setRenderHint(QPainter::Antialiasing);
-            chartView->setStyleSheet("background: transparent;");
-            chartLayout->addWidget(chartView);
+                QChartView* chartView = new QChartView(pieChart);
+                chartView->setRenderHint(QPainter::Antialiasing);
+                chartView->setStyleSheet("background: transparent;");
+                chartView->setContentsMargins(0, 0, 0, 0);
+                chartLayout->addWidget(chartView, 1);
 
-            mainLayout->addWidget(chartFrame);
+                mainLayout->addWidget(chartFrame, 1);
         }
 
         chartDb.close();
