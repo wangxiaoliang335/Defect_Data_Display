@@ -2721,6 +2721,36 @@ void Defect_Data_Display::loadTrendData(const QString& timeRange)
         }
     }
 
+    QStringList expectedPeriods;
+    if (timeRange == "按小时") {
+        const int startHour = qMin(m_searchStartHour, m_searchEndHour);
+        const int endHour = qMax(m_searchStartHour, m_searchEndHour);
+        const QString dateStr = m_selectedDate.toString("yyyy-MM-dd");
+        for (int h = startHour; h <= endHour; ++h) {
+            expectedPeriods.append(QString("%1 %2:00").arg(dateStr).arg(h, 2, 10, QChar('0')));
+        }
+    } else if (timeRange == "按天") {
+        const QString monthStr = m_selectedDate.toString("yyyy-MM");
+        const int daysInMonth = m_selectedDate.daysInMonth();
+        for (int d = 1; d <= daysInMonth; ++d) {
+            expectedPeriods.append(QString("%1-%2").arg(monthStr).arg(d, 2, 10, QChar('0')));
+        }
+    } else if (timeRange == "按月") {
+        const int year = m_selectedDate.year();
+        for (int m = 1; m <= 12; ++m) {
+            expectedPeriods.append(QString("%1-%2").arg(year).arg(m, 2, 10, QChar('0')));
+        }
+    }
+
+    for (const QString& period : expectedPeriods) {
+        if (!trendData.contains(period)) {
+            trendData[period] = QMap<QString, int>();
+        }
+        if (!totalPerPeriod.contains(period)) {
+            totalPerPeriod[period] = 0;
+        }
+    }
+
 
     // Compute defect rate per grade (grade count / total count per period * 100)
     QMap<QString, QMap<QString, double>> defectRates;
@@ -2966,9 +2996,47 @@ void Defect_Data_Display::updateTrendChart(
             }
 
             const auto barSets = safeSeries->barSets();
-            qDebug() << "[BarValueLabels] bar set count=" << barSets.size();
+            const int setCount = barSets.size();
+            qDebug() << "[BarValueLabels] bar set count=" << setCount;
+            if (setCount == 0) {
+                return;
+            }
 
+            int categoryCount = 0;
             for (QBarSet* set : barSets) {
+                if (set) {
+                    categoryCount = qMax(categoryCount, set->count());
+                }
+            }
+            if (categoryCount == 0) {
+                return;
+            }
+
+            QList<QAbstractAxis*> axesY = safeChart->axes(Qt::Vertical, safeSeries);
+            if (axesY.isEmpty()) {
+                axesY = safeChart->axes(Qt::Vertical);
+            }
+            QValueAxis* axisY = axesY.isEmpty() ? nullptr : qobject_cast<QValueAxis*>(axesY.first());
+            if (!axisY) {
+                qDebug() << "[BarValueLabels] missing vertical value axis, skip redraw";
+                return;
+            }
+
+            const qreal yMin = axisY->min();
+            const qreal yMax = axisY->max();
+            const qreal yRange = yMax - yMin;
+            if (yRange <= 0.0 || plotArea.width() <= 0.0 || plotArea.height() <= 0.0) {
+                qDebug() << "[BarValueLabels] invalid plot area or yRange, skip redraw";
+                return;
+            }
+
+            const qreal categorySlotWidth = plotArea.width() / categoryCount;
+            const qreal groupWidth = categorySlotWidth * safeSeries->barWidth();
+            const qreal groupLeftMargin = (categorySlotWidth - groupWidth) / 2.0;
+            const qreal singleBarWidth = groupWidth / setCount;
+
+            for (int setIndex = 0; setIndex < setCount; ++setIndex) {
+                QBarSet* set = barSets.at(setIndex);
                 if (!set) {
                     qDebug() << "[BarValueLabels] encountered null QBarSet, skip";
                     continue;
@@ -2977,30 +3045,29 @@ void Defect_Data_Display::updateTrendChart(
                 qDebug() << "[BarValueLabels] drawing set" << set->label() << "count=" << set->count();
 
                 for (int i = 0; i < set->count(); ++i) {
-                    QPointF valuePoint(i, set->at(i));
-                    qDebug() << "[BarValueLabels] before mapToPosition"
-                             << "set=" << set->label()
-                             << "index=" << i
-                             << "value=" << set->at(i)
-                             << "point=" << valuePoint;
+                    const qreal value = set->at(i);
+                    if (qFuzzyIsNull(value)) {
+                        continue;
+                    }
 
-                    QPointF mapped = safeChart->mapToPosition(valuePoint, safeSeries);
-
-                    qDebug() << "[BarValueLabels] after mapToPosition"
-                             << "set=" << set->label()
-                             << "index=" << i
-                             << "mapped=" << mapped;
+                    const qreal barCenterX = plotArea.left()
+                        + i * categorySlotWidth
+                        + groupLeftMargin
+                        + setIndex * singleBarWidth
+                        + singleBarWidth / 2.0;
+                    const qreal normalizedValue = (value - yMin) / yRange;
+                    const qreal barTopY = plotArea.bottom() - normalizedValue * plotArea.height();
 
                     QGraphicsSimpleTextItem* label = new QGraphicsSimpleTextItem(
-                        QString::number(set->at(i), 'f', decimals));
+                        QString::number(value, 'f', decimals));
                     label->setData(0, QStringLiteral("customBarValueLabel"));
                     label->setFont(QFont("Arial", 8, QFont::Bold));
                     label->setBrush(QBrush(set->labelColor()));
                     label->setZValue(100);
                     scene->addItem(label);
 
-                    qreal x = mapped.x() - label->boundingRect().width() / 2;
-                    qreal y = mapped.y() - label->boundingRect().height() - 6;
+                    const qreal x = barCenterX - label->boundingRect().width() / 2.0;
+                    const qreal y = barTopY - label->boundingRect().height() - 6.0;
                     label->setPos(x, y);
                 }
             }

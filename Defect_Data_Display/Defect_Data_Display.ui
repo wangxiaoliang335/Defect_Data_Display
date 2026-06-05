@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>LCD缺陷检测系统</string>
+   <string>TCL 华星 AFT AMT 缺陷系统</string>
   </property>
   <property name="styleSheet">
    <string>
@@ -163,7 +163,7 @@ QWidget#centralWidget {
           <string>color: #00d9ff; font-size: 22px; font-weight: bold;</string>
          </property>
          <property name="text">
-          <string>IVS LCD 缺陷检测系统</string>
+          <string>TCL 华星 AFT AMT 缺陷系统</string>
          </property>
         </widget>
        </item>
