@@ -167,6 +167,7 @@ private:
     void updateInspectionResultChart(const QMap<QString, int>& passByPeriod, const QMap<QString, int>& failByPeriod);
     void updateDefectMappingChart(const QList<QPair<int, int>>& defectPositions, const QStringList& defectTypes);
     void updateTrendChart(const QMap<QString, QMap<QString, int>>& trendData, const QMap<QString, QMap<QString, double>>& defectRates, const QStringList& allGrades, const QString& timeRange);
+    void clearDetailView();
     void updateDetailTable(const QList<QVariantList>& defectDetails);
     void updateStats(int totalInspect, int passCount, int failCount, double passRate, int totalDefects);
     QString getTimeFilterClause(const QString& timeRange);

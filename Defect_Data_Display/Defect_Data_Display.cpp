@@ -1931,6 +1931,8 @@ void Defect_Data_Display::onRefreshClicked()
     m_inspectionTrendData.clear();
     m_trendDataY2.clear();
     m_trendCache = CachedTabData();
+    m_detailCache = CachedTabData();
+    clearDetailView();
 
     // Disable refresh button and time controls while loading
     ui.btnRefresh->setEnabled(false);
@@ -2059,6 +2061,33 @@ void Defect_Data_Display::clearAllCharts()
     if (m_chartViewDefectRateY2) {
         clearChart(((QChartView*)m_chartViewDefectRateY2)->chart());
     }
+}
+
+void Defect_Data_Display::clearDetailView()
+{
+    m_detailPieData.clear();
+    m_detailPieTitle.clear();
+
+    if (ui.chartPieDetail->layout()) {
+        while (QLayoutItem* item = ui.chartPieDetail->layout()->takeAt(0)) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+    }
+
+    if (ui.chartDetail->layout()) {
+        while (QLayoutItem* item = ui.chartDetail->layout()->takeAt(0)) {
+            if (item->widget()) {
+                item->widget()->deleteLater();
+            }
+            delete item;
+        }
+    }
+
+    m_chartViewPieDetail = nullptr;
+    m_chartViewDetail = nullptr;
 }
 
 void Defect_Data_Display::onTimeRangeChanged(int index)
@@ -2192,6 +2221,12 @@ void Defect_Data_Display::onDataLoaded_Trend(const QMap<QString, QMap<QString, i
 void Defect_Data_Display::onDataLoaded_Detail(const QList<QVariantList>& defectDetails)
 {
     qDebug() << "=== onDataLoaded_Detail called ===" << "records:" << defectDetails.size();
+
+    if (defectDetails.isEmpty()) {
+        m_detailCache = CachedTabData();
+        clearDetailView();
+        return;
+    }
 
     m_detailCache.defectDetails = defectDetails;
     m_detailCache.timeRange = ui.comboTimeRange->currentText();
@@ -3423,7 +3458,9 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
     qDebug() << "updateDetailTable called with" << defectDetails.size() << "records";
 
     if (defectDetails.isEmpty()) {
-        qDebug() << "No detail data, returning early";
+        qDebug() << "No detail data, clearing detail view";
+        m_detailCache = CachedTabData();
+        clearDetailView();
         return;
     }
 
@@ -5161,6 +5198,8 @@ void Defect_Data_Display::loadTrendDataAsync(const QString& timeRange)
 
 void Defect_Data_Display::loadDetailDataAsync(const QString& timeRange)
 {
+    clearDetailView();
+
     if (m_isTabLoading) {
         if (m_tabWorkerThread) {
             m_tabWorkerThread->quit();
