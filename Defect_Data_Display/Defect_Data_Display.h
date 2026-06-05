@@ -44,6 +44,8 @@ struct CachedTabData {
     QList<QVariantList> defectDetails;
     QString timeRange;
     QDate date;
+    int startHour = -1;
+    int endHour = -1;
     qint64 timestamp;
 };
 
