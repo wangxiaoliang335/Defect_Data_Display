@@ -107,6 +107,8 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
                 loadTrendDataAsync(ui.comboTimeRange->currentText());
             } else if (currentTab == 2) {
                 loadDetailDataAsync(ui.comboTimeRange->currentText());
+            } else if (currentTab == 4) {
+                loadLocationAbnormalDataAsync(ui.comboTimeRange->currentText());
             }
         }
     });
@@ -118,6 +120,8 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
                 loadTrendDataAsync(ui.comboTimeRange->currentText());
             } else if (currentTab == 2) {
                 loadDetailDataAsync(ui.comboTimeRange->currentText());
+            } else if (currentTab == 4) {
+                loadLocationAbnormalDataAsync(ui.comboTimeRange->currentText());
             }
         }
     });
@@ -5417,6 +5421,8 @@ void Defect_Data_Display::onDataLoaded_LocationAbnormal(const QMap<QString, QMap
     m_locationAbnormalCache.timestamp = QDateTime::currentMSecsSinceEpoch();
     m_locationAbnormalCache.timeRange = ui.comboTimeRange->currentText();
     m_locationAbnormalCache.date = m_selectedDate;
+    m_locationAbnormalCache.startHour = (ui.comboTimeRange->currentText() == "按小时") ? qMin(m_searchStartHour, m_searchEndHour) : -1;
+    m_locationAbnormalCache.endHour = (ui.comboTimeRange->currentText() == "按小时") ? qMax(m_searchStartHour, m_searchEndHour) : -1;
 
     updateLocationAbnormalChart(abnormalByPeriod);
 }
@@ -5448,7 +5454,9 @@ void Defect_Data_Display::updateLocationAbnormalChart(const QMap<QString, QMap<i
     // Generate time periods based on time range type
     QList<QString> periods;
     if (timeRange == "按小时") {
-        for (int h = 0; h < 24; ++h) {
+        const int startHour = qMin(m_searchStartHour, m_searchEndHour);
+        const int endHour = qMax(m_searchStartHour, m_searchEndHour);
+        for (int h = startHour; h <= endHour; ++h) {
             periods << QString("%1 %2:00").arg(m_selectedDate.toString("yyyy-MM-dd")).arg(h, 2, 10, QChar('0'));
         }
     } else if (timeRange == "按天") {
