@@ -1924,6 +1924,14 @@ void Defect_Data_Display::onRefreshClicked()
     // Clear all charts to show empty state
     clearAllCharts();
 
+    // Clear cached time-based chart data so a no-data refresh cannot reuse previous date results
+    m_platformTrendData.clear();
+    m_platformAoiResultData.clear();
+    m_defectTrendData.clear();
+    m_inspectionTrendData.clear();
+    m_trendDataY2.clear();
+    m_trendCache = CachedTabData();
+
     // Disable refresh button and time controls while loading
     ui.btnRefresh->setEnabled(false);
     ui.comboTimeRange->setEnabled(false);
@@ -1997,56 +2005,59 @@ void Defect_Data_Display::onRefreshClicked()
 
 void Defect_Data_Display::clearAllCharts()
 {
+    auto clearChart = [](QChart* chart) {
+        if (!chart) return;
+        chart->removeAllSeries();
+        for (QAbstractAxis* axis : chart->axes()) {
+            chart->removeAxis(axis);
+            axis->deleteLater();
+        }
+        if (chart->scene()) {
+            const QList<QGraphicsItem*> items = chart->scene()->items();
+            for (QGraphicsItem* item : items) {
+                if (!item) continue;
+                const QVariant itemTag = item->data(0);
+                if (itemTag == QStringLiteral("customBarValueLabel")
+                    || itemTag == QStringLiteral("customLinePointLabel")) {
+                    delete item;
+                }
+            }
+        }
+    };
+
     // Clear platform charts
     void* platformCharts[] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
     for (int i = 0; i < 4; ++i) {
-        QChart* chart = ((QChartView*)platformCharts[i])->chart();
-        chart->removeAllSeries();
-        for (auto axis : chart->axes()) {
-            chart->removeAxis(axis);
-        }
+        clearChart(((QChartView*)platformCharts[i])->chart());
     }
 
     // Clear AOI chart (hidden tab)
     if (m_chartViewAoi) {
-        QChart* aoiChart = ((QChartView*)m_chartViewAoi)->chart();
-        aoiChart->removeAllSeries();
-        for (auto axis : aoiChart->axes()) {
-            aoiChart->removeAxis(axis);
-        }
+        clearChart(((QChartView*)m_chartViewAoi)->chart());
     }
 
     // Clear inspection charts (hidden tab)
     if (m_chartViewInspectionPass) {
-        QChart* passChart = ((QChartView*)m_chartViewInspectionPass)->chart();
-        passChart->removeAllSeries();
-        for (auto axis : passChart->axes()) {
-            passChart->removeAxis(axis);
-        }
+        clearChart(((QChartView*)m_chartViewInspectionPass)->chart());
     }
 
     if (m_chartViewInspectionFail) {
-        QChart* failChart = ((QChartView*)m_chartViewInspectionFail)->chart();
-        failChart->removeAllSeries();
-        for (auto axis : failChart->axes()) {
-            failChart->removeAxis(axis);
-        }
+        clearChart(((QChartView*)m_chartViewInspectionFail)->chart());
     }
 
     // Clear defect mapping chart (hidden tab)
     if (m_chartViewDefectMapping) {
-        QChart* mappingChart = ((QChartView*)m_chartViewDefectMapping)->chart();
-        mappingChart->removeAllSeries();
-        for (auto axis : mappingChart->axes()) {
-            mappingChart->removeAxis(axis);
-        }
+        clearChart(((QChartView*)m_chartViewDefectMapping)->chart());
     }
 
-    // Clear trend chart
-    QChart* trendChart = ((QChartView*)m_chartViewTrend)->chart();
-    trendChart->removeAllSeries();
-    for (auto axis : trendChart->axes()) {
-        trendChart->removeAxis(axis);
+    // Clear trend charts
+    clearChart(((QChartView*)m_chartViewTrend)->chart());
+    clearChart(((QChartView*)m_chartViewDefectRate)->chart());
+    if (m_chartViewTrendY2) {
+        clearChart(((QChartView*)m_chartViewTrendY2)->chart());
+    }
+    if (m_chartViewDefectRateY2) {
+        clearChart(((QChartView*)m_chartViewDefectRateY2)->chart());
     }
 }
 
@@ -2812,6 +2823,22 @@ void Defect_Data_Display::updateTrendChart(
 
     if (trendData.isEmpty()) {
         qDebug() << "No trend data, returning early";
+        if (m_chartViewTrendY2) {
+            QChart* chartTrendY2 = ((QChartView*)m_chartViewTrendY2)->chart();
+            chartTrendY2->removeAllSeries();
+            for (QAbstractAxis* axis : chartTrendY2->axes()) {
+                chartTrendY2->removeAxis(axis);
+                axis->deleteLater();
+            }
+        }
+        if (m_chartViewDefectRateY2) {
+            QChart* chartRateY2 = ((QChartView*)m_chartViewDefectRateY2)->chart();
+            chartRateY2->removeAllSeries();
+            for (QAbstractAxis* axis : chartRateY2->axes()) {
+                chartRateY2->removeAxis(axis);
+                axis->deleteLater();
+            }
+        }
         return;
     }
 
