@@ -6316,20 +6316,29 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
                     slice->setLabelFont(QFont("Arial", 10));
                     colorIdx++;
 
-                    // Click slice to show Code_AOI filtered detail dialog
+                    // Click slice to show Code_AOI filtered detail dialog with pagination
                     QString clickedCodeAOI = it.key();
                     connect(slice, &QPieSlice::clicked, this, [=]() {
                         QDialog filterDialog(this);
                         filterDialog.setModal(true);
-                        filterDialog.resize(1200, 700);
+                        filterDialog.resize(1200, 750);
                         filterDialog.setWindowTitle(QString("等级: %1 / Code_AOI: %2").arg(gradeName).arg(clickedCodeAOI));
                         filterDialog.setStyleSheet("QDialog { background-color: rgba(15, 25, 45, 230); color: #e0f0ff; }");
 
                         QVBoxLayout* fLayout = new QVBoxLayout(&filterDialog);
-                        fLayout->setContentsMargins(15, 15, 15, 15);
-                        fLayout->setSpacing(10);
+                        fLayout->setContentsMargins(10, 10, 10, 10);
+                        fLayout->setSpacing(8);
 
-                        // Time range filter for this sub-dialog
+                        // DB connection
+                        QString fConnName = QString("slicefilter_%1").arg(QDateTime::currentMSecsSinceEpoch());
+                        QSqlDatabase fDb = QSqlDatabase::addDatabase("QODBC", fConnName);
+                        fDb.setDatabaseName(chartConnStr);
+                        if (!fDb.open()) {
+                            QMessageBox::warning(this, "错误", "数据库连接失败");
+                            return;
+                        }
+
+                        // Time range filter
                         QString fTimeRange = ui.comboTimeRange->currentText();
                         QDate fDate = m_selectedDate;
                         QString fDateStr = fDate.toString("yyyy-MM-dd");
@@ -6340,22 +6349,46 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
                             fTimeFilter = QString(" AND DATE_FORMAT(StartTime, '%Y-%m') = '%1' ").arg(fDateStr.left(7));
                         }
 
-                        // Sub-query for this Code_AOI
-                        QString fConnName = QString("slicefilter_%1").arg(QDateTime::currentMSecsSinceEpoch());
-                        QSqlDatabase fDb = QSqlDatabase::addDatabase("QODBC", fConnName);
-                        fDb.setDatabaseName(chartConnStr);
-                        if (!fDb.open()) {
-                            QMessageBox::warning(this, "错误", "数据库连接失败");
-                            return;
-                        }
-
-                        QString fQueryStr = QString(
+                        // Load ALL data into memory at once
+                        struct FRowData {
+                            QString startTime, screenId, aoiResult, gradeAOI, codeAOI, status, localIP;
+                            int platformId;
+                        };
+                        QList<FRowData> fAllRows;
+                        QString fLoadAllStr = QString(
                             "SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID "
                             "FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND Code_AOI = '%2' %3 "
-                            "ORDER BY StartTime DESC LIMIT 500"
+                            "ORDER BY StartTime DESC"
                         ).arg(gradeName).arg(clickedCodeAOI).arg(fTimeFilter);
+                        QSqlQuery fLoadAllQuery(fDb);
+                        if (fLoadAllQuery.exec(fLoadAllStr)) {
+                            while (fLoadAllQuery.next()) {
+                                FRowData row;
+                                row.startTime = fLoadAllQuery.value(0).toString();
+                                row.screenId = fLoadAllQuery.value(1).toString();
+                                row.aoiResult = fLoadAllQuery.value(2).toString();
+                                row.gradeAOI = fLoadAllQuery.value(3).toString();
+                                row.codeAOI = fLoadAllQuery.value(4).toString();
+                                row.status = fLoadAllQuery.value(5).toString();
+                                row.localIP = fLoadAllQuery.value(6).toString();
+                                row.platformId = fLoadAllQuery.value(7).toInt();
+                                fAllRows.append(row);
+                            }
+                        }
+                        fDb.close();
+                        QSqlDatabase::removeDatabase(fConnName);
 
-                        QSqlQuery fQuery(fDb);
+                        int fTotalCount = fAllRows.size();
+                        int fPageSize = 100;
+                        int fTotalPages = qMax(1, (fTotalCount + fPageSize - 1) / fPageSize);
+
+                        // Page info label
+                        QLabel* fPageLabel = new QLabel(&filterDialog);
+                        fPageLabel->setStyleSheet("color: #9fdcff; font-size: 13px;");
+                        fPageLabel->setAlignment(Qt::AlignCenter);
+                        fLayout->addWidget(fPageLabel);
+
+                        // Table widget
                         QTableWidget* fTable = new QTableWidget(&filterDialog);
                         fTable->setColumnCount(6);
                         fTable->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
@@ -6385,41 +6418,45 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
                                 font-weight: bold; font-size: 13px;
                             }
                         )");
+                        fLayout->addWidget(fTable, 1);
 
-                        fLayout->addWidget(fTable);
+                        // Pagination buttons
+                        QHBoxLayout* fPageBtnLayout = new QHBoxLayout();
+                        fPageBtnLayout->setSpacing(8);
 
-                        QObject::connect(fTable, &QTableWidget::cellDoubleClicked, this, [=](int fRow, int /*col*/) {
-                            QTableWidgetItem* fStartItem = fTable->item(fRow, 0);
-                            if (!fStartItem) return;
-                            QString fScreenId = fStartItem->data(Qt::UserRole).toString();
-                            QString fLocalIp = fStartItem->data(Qt::UserRole + 1).toString();
-                            int fPlatformId = fStartItem->data(Qt::UserRole + 2).toInt();
-                            QDateTime fStartTime = fStartItem->data(Qt::UserRole + 3).toDateTime();
-                            showInspectionImageDialog(fScreenId, fPlatformId, fLocalIp, fStartTime);
-                        });
-
-                        if (fQuery.exec(fQueryStr)) {
-                            fTable->setRowCount(0);
-                            while (fQuery.next()) {
-                                int fRow = fTable->rowCount();
-                                fTable->insertRow(fRow);
-                                for (int col = 0; col < 6; ++col) {
-                                    fTable->setItem(fRow, col, new QTableWidgetItem(fQuery.value(col).toString()));
-                                }
-                                QTableWidgetItem* fStartItem = fTable->item(fRow, 0);
-                                if (fStartItem) {
-                                    fStartItem->setData(Qt::UserRole, fQuery.value(1).toString());
-                                    fStartItem->setData(Qt::UserRole + 1, fQuery.value(6).toString());
-                                    fStartItem->setData(Qt::UserRole + 2, fQuery.value(7).toInt());
-                                    fStartItem->setData(Qt::UserRole + 3, fQuery.value(0).toDateTime());
-                                }
+                        QPushButton* fPrevBtn = new QPushButton("上一页", &filterDialog);
+                        fPrevBtn->setFixedWidth(90);
+                        fPrevBtn->setStyleSheet(R"(
+                            QPushButton {
+                                background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,120,170,180), stop:1 rgba(0,80,130,180));
+                                color: #ffffff; border: 1px solid rgba(0,217,255,100);
+                                border-radius: 6px; padding: 6px 16px; font-size: 12px; font-weight: bold;
                             }
-                        } else {
-                            QMessageBox::warning(&filterDialog, "错误", "查询失败: " + fQuery.lastError().text());
-                        }
+                            QPushButton:hover { background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,160,220,220), stop:1 rgba(0,110,170,220)); border: 1px solid #00d9ff; }
+                            QPushButton:disabled { background-color: rgba(50,60,80,200); color: #607080; border: 1px solid rgba(0,217,255,40); }
+                        )");
 
-                        QSqlDatabase::removeDatabase(fConnName);
+                        QPushButton* fNextBtn = new QPushButton("下一页", &filterDialog);
+                        fNextBtn->setFixedWidth(90);
+                        fNextBtn->setStyleSheet(R"(
+                            QPushButton {
+                                background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,120,170,180), stop:1 rgba(0,80,130,180));
+                                color: #ffffff; border: 1px solid rgba(0,217,255,100);
+                                border-radius: 6px; padding: 6px 16px; font-size: 12px; font-weight: bold;
+                            }
+                            QPushButton:hover { background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,160,220,220), stop:1 rgba(0,110,170,220)); border: 1px solid #00d9ff; }
+                            QPushButton:disabled { background-color: rgba(50,60,80,200); color: #607080; border: 1px solid rgba(0,217,255,40); }
+                        )");
 
+                        fPageBtnLayout->addStretch();
+                        fPageBtnLayout->addWidget(fPrevBtn);
+                        fPageBtnLayout->addWidget(fNextBtn);
+                        fPageBtnLayout->addStretch();
+                        fLayout->addLayout(fPageBtnLayout);
+
+                        // Bottom buttons
+                        QHBoxLayout* fBtnLayout = new QHBoxLayout();
+                        fBtnLayout->setSpacing(8);
                         QPushButton* fCloseBtn = new QPushButton("关闭", &filterDialog);
                         fCloseBtn->setFixedWidth(100);
                         fCloseBtn->setStyleSheet(R"(
@@ -6430,11 +6467,67 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
                             }
                             QPushButton:hover { background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(0,160,220,220), stop:1 rgba(0,110,170,220)); border: 1px solid #00d9ff; }
                         )");
-                        QHBoxLayout* fBtnLayout = new QHBoxLayout();
                         fBtnLayout->addStretch();
                         fBtnLayout->addWidget(fCloseBtn);
                         fLayout->addLayout(fBtnLayout);
                         QObject::connect(fCloseBtn, &QPushButton::clicked, &filterDialog, &QDialog::accept);
+
+                        // Lambda to load a page from memory
+                        int fCurrentPage = 1;
+                        auto fLoadPage = [=](int page) {
+                            int startIndex = (page - 1) * fPageSize;
+                            int endIndex = qMin(startIndex + fPageSize, fTotalCount);
+
+                            fTable->setRowCount(0);
+                            for (int i = startIndex; i < endIndex; ++i) {
+                                const FRowData& rowData = fAllRows.at(i);
+                                int fRow = fTable->rowCount();
+                                fTable->insertRow(fRow);
+                                fTable->setItem(fRow, 0, new QTableWidgetItem(rowData.startTime));
+                                fTable->setItem(fRow, 1, new QTableWidgetItem(rowData.screenId));
+                                fTable->setItem(fRow, 2, new QTableWidgetItem(rowData.aoiResult));
+                                fTable->setItem(fRow, 3, new QTableWidgetItem(rowData.gradeAOI));
+                                fTable->setItem(fRow, 4, new QTableWidgetItem(rowData.codeAOI));
+                                fTable->setItem(fRow, 5, new QTableWidgetItem(rowData.status));
+
+                                QTableWidgetItem* fStartItem = fTable->item(fRow, 0);
+                                if (fStartItem) {
+                                    fStartItem->setData(Qt::UserRole, rowData.screenId);
+                                    fStartItem->setData(Qt::UserRole + 1, rowData.localIP);
+                                    fStartItem->setData(Qt::UserRole + 2, rowData.platformId);
+                                    fStartItem->setData(Qt::UserRole + 3, QDateTime::fromString(rowData.startTime, "yyyy-MM-dd hh:mm:ss"));
+                                }
+                            }
+                            fPageLabel->setText(QString("共 %1 条记录，第 %2/%3 页").arg(fTotalCount).arg(page).arg(fTotalPages));
+                            fPrevBtn->setEnabled(page > 1);
+                            fNextBtn->setEnabled(page < fTotalPages);
+                        };
+
+                        fLoadPage(1);
+
+                        QObject::connect(fPrevBtn, &QPushButton::clicked, this, [&, fLoadPage](bool) {
+                            if (fCurrentPage > 1) {
+                                fCurrentPage--;
+                                fLoadPage(fCurrentPage);
+                            }
+                        });
+
+                        QObject::connect(fNextBtn, &QPushButton::clicked, this, [&, fLoadPage](bool) {
+                            if (fCurrentPage < fTotalPages) {
+                                fCurrentPage++;
+                                fLoadPage(fCurrentPage);
+                            }
+                        });
+
+                        QObject::connect(fTable, &QTableWidget::cellDoubleClicked, this, [=](int fRow, int /*col*/) {
+                            QTableWidgetItem* fStartItem = fTable->item(fRow, 0);
+                            if (!fStartItem) return;
+                            QString fScreenId = fStartItem->data(Qt::UserRole).toString();
+                            QString fLocalIp = fStartItem->data(Qt::UserRole + 1).toString();
+                            int fPlatformId = fStartItem->data(Qt::UserRole + 2).toInt();
+                            QDateTime fStartTime = fStartItem->data(Qt::UserRole + 3).toDateTime();
+                            showInspectionImageDialog(fScreenId, fPlatformId, fLocalIp, fStartTime);
+                        });
 
                         filterDialog.exec();
                     });
