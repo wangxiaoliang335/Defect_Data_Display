@@ -3046,9 +3046,6 @@ void Defect_Data_Display::updateTrendChart(
 
                 for (int i = 0; i < set->count(); ++i) {
                     const qreal value = set->at(i);
-                    if (qFuzzyIsNull(value)) {
-                        continue;
-                    }
 
                     const qreal barCenterX = plotArea.left()
                         + i * categorySlotWidth
@@ -3056,7 +3053,10 @@ void Defect_Data_Display::updateTrendChart(
                         + setIndex * singleBarWidth
                         + singleBarWidth / 2.0;
                     const qreal normalizedValue = (value - yMin) / yRange;
-                    const qreal barTopY = plotArea.bottom() - normalizedValue * plotArea.height();
+                    qreal barTopY = plotArea.bottom() - normalizedValue * plotArea.height();
+                    if (qFuzzyIsNull(value)) {
+                        barTopY -= 8.0;
+                    }
 
                     QGraphicsSimpleTextItem* label = new QGraphicsSimpleTextItem(
                         QString::number(value, 'f', decimals));
