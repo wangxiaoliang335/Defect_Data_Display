@@ -1363,27 +1363,50 @@ void Defect_Data_Display::onTabChanged(int index)
         case 0: {
             // Platform chart tab (index 0)
             // Check if "按时间" sub-tab (index 0) is selected
-            int platformIdx = ui.tabPlatformPages->currentIndex();
-            
-            if (platformIdx == 0) {
+            int rawPlatformTabIndex = ui.tabPlatformPages->currentIndex();
+            qInfo() << "onTabChanged platform page" << "rawIndex=" << rawPlatformTabIndex;
+
+            if (rawPlatformTabIndex == 0) {
                 // "按时间" tab selected - call updatePlatformByTimeChart
                 qDebug() << "Index 0: By-time tab selected, scheduling chart update";
                 QTimer::singleShot(50, this, [this]() {
-                    if (!m_chartViewPlatformByTime) return;
+                    if (!m_chartViewPlatformByTime) {
+                        qWarning() << "By-time chart view is null during delayed update";
+                        return;
+                    }
+                    qInfo() << "Updating by-time chart from onTabChanged delayed task";
                     updatePlatformByTimeChart();
                 });
                 break;
             }
-            
+
+            int platformArrayIndex = rawPlatformTabIndex - 1;
+            if (platformArrayIndex < 0 || platformArrayIndex >= 4) {
+                qWarning() << "Invalid platform tab index in onTabChanged"
+                           << "rawIndex=" << rawPlatformTabIndex
+                           << "mappedIndex=" << platformArrayIndex;
+                break;
+            }
+
             // For platform tabs 1-4, update the platform-specific charts
-            qDebug() << "Index 0: Platform" << platformIdx << "tab switched to, scheduling label update";
-            
+            qDebug() << "Index 0: Platform" << rawPlatformTabIndex << "tab switched to, scheduling label update";
+            qInfo() << "Scheduling platform label redraw"
+                    << "rawIndex=" << rawPlatformTabIndex
+                    << "mappedIndex=" << platformArrayIndex;
+
             // Get the chart for this platform
             void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
-            QChartView* chartView = (QChartView*)chartViewPtrs[platformIdx];
-            if (!chartView) break;
+            QChartView* chartView = (QChartView*)chartViewPtrs[platformArrayIndex];
+            if (!chartView) {
+                qWarning() << "Platform chart view is null in onTabChanged" << "mappedIndex=" << platformArrayIndex;
+                break;
+            }
             QChart* chart = chartView->chart();
-            
+            if (!chart) {
+                qWarning() << "Platform chart is null in onTabChanged" << "mappedIndex=" << platformArrayIndex;
+                break;
+            }
+
             // Clear old text items
             if (chart->scene()) {
                 QList<QGraphicsItem*> items = chart->scene()->items();
@@ -1394,17 +1417,37 @@ void Defect_Data_Display::onTabChanged(int index)
                     }
                 }
             }
-            
+
+            QPointer<QChartView> safeChartView(chartView);
+            QPointer<QChart> safeChart(chart);
+
             // Wait for layout and redraw labels
-            QTimer::singleShot(100, this, [this, chartView, chart, platformIdx]() {
-                QRectF plotArea = chart->plotArea();
-                qDebug() << "[TabSwitch] Platform" << platformIdx << "plotArea after switch:" << plotArea;
-                
-                if (plotArea.width() < 200 || plotArea.height() < 50) {
-                    qDebug() << "[TabSwitch] Platform" << platformIdx << "plotArea still invalid, skipping labels";
+            QTimer::singleShot(100, this, [this, safeChartView, safeChart, rawPlatformTabIndex, platformArrayIndex]() {
+                if (!safeChartView) {
+                    qWarning() << "Delayed platform label redraw skipped: chartView destroyed" << "mappedIndex=" << platformArrayIndex;
                     return;
                 }
-                
+                if (!safeChart) {
+                    qWarning() << "Delayed platform label redraw skipped: chart destroyed" << "mappedIndex=" << platformArrayIndex;
+                    return;
+                }
+                QChart* chart = safeChart.data();
+                if (!chart->scene()) {
+                    qWarning() << "Delayed platform label redraw skipped: chart scene null" << "mappedIndex=" << platformArrayIndex;
+                    return;
+                }
+                QRectF plotArea = chart->plotArea();
+                qDebug() << "[TabSwitch] Platform" << rawPlatformTabIndex << "plotArea after switch:" << plotArea;
+                qInfo() << "Delayed platform label redraw running"
+                        << "rawIndex=" << rawPlatformTabIndex
+                        << "mappedIndex=" << platformArrayIndex
+                        << "plotArea=" << plotArea;
+
+                if (plotArea.width() < 200 || plotArea.height() < 50) {
+                    qDebug() << "[TabSwitch] Platform" << rawPlatformTabIndex << "plotArea still invalid, skipping labels";
+                    return;
+                }
+
                 // Get time categories from axis
                 QList<QAbstractAxis*> axesX = chart->axes(Qt::Horizontal);
                 QStringList timeCategories;
@@ -1412,13 +1455,19 @@ void Defect_Data_Display::onTabChanged(int index)
                     QBarCategoryAxis* axisX = qobject_cast<QBarCategoryAxis*>(axesX.first());
                     if (axisX) timeCategories = axisX->categories();
                 }
-                
+
                 // Get column totals from the stacked series
                 QList<QAbstractSeries*> seriesList = chart->series();
-                if (seriesList.isEmpty()) return;
+                if (seriesList.isEmpty()) {
+                    qWarning() << "Delayed platform label redraw skipped: no series" << "mappedIndex=" << platformArrayIndex;
+                    return;
+                }
                 QStackedBarSeries* stackedSeries = qobject_cast<QStackedBarSeries*>(seriesList.first());
-                if (!stackedSeries) return;
-                
+                if (!stackedSeries) {
+                    qWarning() << "Delayed platform label redraw skipped: first series is not stacked bar" << "mappedIndex=" << platformArrayIndex;
+                    return;
+                }
+
                 // Calculate totals from the bar sets
                 QList<int> columnTotals(timeCategories.size(), 0);
                 QList<QBarSet*> barSets = stackedSeries->barSets();
@@ -1427,36 +1476,50 @@ void Defect_Data_Display::onTabChanged(int index)
                         columnTotals[ti] += (int)barSet->at(ti);
                     }
                 }
-                
+
                 // Get Y axis
                 QList<QAbstractAxis*> axesY = chart->axes(Qt::Vertical);
-                if (axesY.isEmpty()) return;
+                if (axesY.isEmpty()) {
+                    qWarning() << "Delayed platform label redraw skipped: no Y axis" << "mappedIndex=" << platformArrayIndex;
+                    return;
+                }
                 QValueAxis* axisY = qobject_cast<QValueAxis*>(axesY.first());
-                if (!axisY) return;
-                
+                if (!axisY) {
+                    qWarning() << "Delayed platform label redraw skipped: Y axis cast failed" << "mappedIndex=" << platformArrayIndex;
+                    return;
+                }
+
                 // Draw labels
-                qDebug() << "[TabSwitch] Platform" << platformIdx << "Drawing" << columnTotals.size() << "labels";
+                qDebug() << "[TabSwitch] Platform" << rawPlatformTabIndex << "Drawing" << columnTotals.size() << "labels";
                 int numBars = timeCategories.size();
+                if (numBars <= 0) {
+                    qWarning() << "Delayed platform label redraw skipped: no categories" << "mappedIndex=" << platformArrayIndex;
+                    return;
+                }
                 qreal barGroupWidth = plotArea.width() / numBars;
                 qreal barWidth = barGroupWidth * 0.7;
                 qreal barLeftMargin = barGroupWidth * 0.15;
                 qreal yMin = axisY->min();
                 qreal yMax = axisY->max();
                 qreal yRange = yMax - yMin;
-                
+                if (qFuzzyIsNull(yRange)) {
+                    qWarning() << "Delayed platform label redraw skipped: yRange is zero" << "mappedIndex=" << platformArrayIndex;
+                    return;
+                }
+
                 for (int ti = 0; ti < numBars; ++ti) {
                     if (columnTotals[ti] <= 0) continue;
-                    
+
                     qreal barCenterX = plotArea.left() + barLeftMargin + ti * barGroupWidth + barWidth / 2;
                     qreal normalizedValue = (columnTotals[ti] - yMin) / yRange;
                     qreal barTopY = plotArea.bottom() - normalizedValue * plotArea.height();
-                    
+
                     QGraphicsSimpleTextItem* textItem = new QGraphicsSimpleTextItem(QString::number(columnTotals[ti]));
                     textItem->setFont(QFont("Arial", 9, QFont::Bold));
                     textItem->setBrush(QBrush(QColor(255, 255, 255)));
                     textItem->setZValue(100);
                     chart->scene()->addItem(textItem);
-                    
+
                     qreal textX = barCenterX - textItem->boundingRect().width() / 2;
                     qreal textY = barTopY - textItem->boundingRect().height() - 3;
                     textItem->setPos(textX, textY);
@@ -1515,6 +1578,7 @@ void Defect_Data_Display::onTabChanged(int index)
 
 void Defect_Data_Display::onPlatformTabChanged(int index)
 {
+    qInfo() << "onPlatformTabChanged" << "rawIndex=" << index;
     qDebug() << "=== onPlatformTabChanged called with index:" << index << "===";
 
     // Index 0 = "按时间" (aggregate view)
@@ -1528,12 +1592,20 @@ void Defect_Data_Display::onPlatformTabChanged(int index)
     if (index < 1 || index > 4) return;
 
     int platformIdx = index - 1;
+    qInfo() << "Resolved platform tab index" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
 
     // Get the chart for this platform
     void* chartViewPtrs[4] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
     QChartView* chartView = (QChartView*)chartViewPtrs[platformIdx];
-    if (!chartView) return;
+    if (!chartView) {
+        qWarning() << "Platform chart view is null in onPlatformTabChanged" << "mappedIndex=" << platformIdx;
+        return;
+    }
     QChart* chart = chartView->chart();
+    if (!chart) {
+        qWarning() << "Platform chart is null in onPlatformTabChanged" << "mappedIndex=" << platformIdx;
+        return;
+    }
 
     // Clear old text items
     if (chart->scene()) {
@@ -1546,8 +1618,24 @@ void Defect_Data_Display::onPlatformTabChanged(int index)
         }
     }
 
+    QPointer<QChartView> safeChartView(chartView);
+    QPointer<QChart> safeChart(chart);
+
     // Wait for layout and redraw labels
-    QTimer::singleShot(100, this, [this, chartView, chart, index]() {
+    QTimer::singleShot(100, this, [this, safeChartView, safeChart, index, platformIdx]() {
+        if (!safeChartView) {
+            qWarning() << "Platform tab delayed redraw skipped: chartView destroyed" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
+        if (!safeChart) {
+            qWarning() << "Platform tab delayed redraw skipped: chart destroyed" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
+        QChart* chart = safeChart.data();
+        if (!chart->scene()) {
+            qWarning() << "Platform tab delayed redraw skipped: chart scene null" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
         QRectF plotArea = chart->plotArea();
         qDebug() << "[PlatformTab] Platform" << index << "plotArea after switch:" << plotArea;
 
@@ -1566,9 +1654,15 @@ void Defect_Data_Display::onPlatformTabChanged(int index)
 
         // Get column totals from the stacked series
         QList<QAbstractSeries*> seriesList = chart->series();
-        if (seriesList.isEmpty()) return;
+        if (seriesList.isEmpty()) {
+            qWarning() << "Platform tab delayed redraw skipped: no series" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
         QStackedBarSeries* stackedSeries = qobject_cast<QStackedBarSeries*>(seriesList.first());
-        if (!stackedSeries) return;
+        if (!stackedSeries) {
+            qWarning() << "Platform tab delayed redraw skipped: first series is not stacked bar" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
 
         // Calculate totals from the bar sets
         QList<int> columnTotals(timeCategories.size(), 0);
@@ -1581,19 +1675,33 @@ void Defect_Data_Display::onPlatformTabChanged(int index)
 
         // Get Y axis
         QList<QAbstractAxis*> axesY = chart->axes(Qt::Vertical);
-        if (axesY.isEmpty()) return;
+        if (axesY.isEmpty()) {
+            qWarning() << "Platform tab delayed redraw skipped: no Y axis" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
         QValueAxis* axisY = qobject_cast<QValueAxis*>(axesY.first());
-        if (!axisY) return;
+        if (!axisY) {
+            qWarning() << "Platform tab delayed redraw skipped: Y axis cast failed" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
 
         // Draw labels
         qDebug() << "[PlatformTab] Platform" << index << "Drawing" << columnTotals.size() << "labels";
         int numBars = timeCategories.size();
+        if (numBars <= 0) {
+            qWarning() << "Platform tab delayed redraw skipped: no categories" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
         qreal barGroupWidth = plotArea.width() / numBars;
         qreal barWidth = barGroupWidth * 0.7;
         qreal barLeftMargin = barGroupWidth * 0.15;
         qreal yMin = axisY->min();
         qreal yMax = axisY->max();
         qreal yRange = yMax - yMin;
+        if (qFuzzyIsNull(yRange)) {
+            qWarning() << "Platform tab delayed redraw skipped: yRange is zero" << "rawIndex=" << index << "mappedIndex=" << platformIdx;
+            return;
+        }
 
         for (int ti = 0; ti < numBars; ++ti) {
             if (columnTotals[ti] <= 0) continue;
@@ -2727,7 +2835,7 @@ void Defect_Data_Display::loadDefectMapping(const QString& timeRange)
 
     QString queryStr = QString(R"(
         SELECT Pos_x, Pos_y, Type
-        FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_aoidefect
         WHERE %1
         ORDER BY StartTime DESC
     )").arg(dateRangeClause);
@@ -2779,7 +2887,7 @@ void Defect_Data_Display::loadTrendData(const QString& timeRange)
             %1 as time_period,
             Grade_AOI,
             COUNT(*) as cnt
-        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_inspectionresult
         WHERE %2
         GROUP BY time_period, Grade_AOI
         ORDER BY time_period, Grade_AOI
@@ -3084,12 +3192,12 @@ void Defect_Data_Display::updateTrendChart(
                      << "series=" << safeSeries.data()
                      << "plotArea=" << plotArea;
 
-            if (!safeChart || !safeSeries) {
-                qDebug() << "[BarValueLabels] chart or series already destroyed, skip redraw";
-                return;
-            }
+        if (!safeChart || !safeSeries) {
+            qDebug() << "[BarValueLabels] chart or series already destroyed, skip redraw";
+            return;
+        }
 
-            QGraphicsScene* scene = safeChart->scene();
+        QGraphicsScene* scene = safeChart->scene();
             if (!scene) {
                 qDebug() << "[BarValueLabels] chart scene is null, skip redraw";
                 return;
@@ -4933,7 +5041,7 @@ void DataLoaderThread::run()
         SELECT %1 as time_period, PlatformID,
                SUM(IF(AOIResult = 'OK', 1, 0)) as pass_cnt,
                SUM(IF(AOIResult != 'OK', 1, 0)) as fail_cnt
-        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_inspectionresult
         WHERE %2
         GROUP BY time_period, PlatformID
         ORDER BY time_period, PlatformID
@@ -4962,7 +5070,7 @@ void DataLoaderThread::run()
     qDebug() << "Querying defect trend...";
     QString defectTrendQuery = QString(R"(
         SELECT %1 as time_period, Type, COUNT(*) as cnt
-        FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_aoidefect
         WHERE %2
         GROUP BY time_period, Type
         ORDER BY time_period
@@ -4989,7 +5097,7 @@ void DataLoaderThread::run()
         SELECT %1 as time_period,
                SUM(IF(AOIResult = 'OK', 1, 0)) as pass_cnt,
                SUM(IF(AOIResult != 'OK', 1, 0)) as fail_cnt
-        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_inspectionresult
         WHERE %2
         GROUP BY time_period
         ORDER BY time_period
@@ -5017,7 +5125,7 @@ void DataLoaderThread::run()
         SELECT %1 as time_period, PlatformID,
                CASE WHEN Grade_AOI = 'R1' THEN 'NG' ELSE 'OK' END as grade_class,
                COUNT(*) as cnt
-        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_inspectionresult
         WHERE %2
         GROUP BY time_period, PlatformID, grade_class
         ORDER BY time_period, PlatformID, grade_class
@@ -5048,7 +5156,7 @@ void DataLoaderThread::run()
     QStringList allGrades;
     QMap<QString, QMap<QString, int>> platformGradeTrendData;
     QString gradeTrendQuery = QString("SELECT %1 as time_period, Grade_AOI, COUNT(*) as cnt "
-        "FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime) "
+        "FROM ivs_lcd_inspectionresult "
         "WHERE %2 "
         "GROUP BY time_period, Grade_AOI "
         "ORDER BY time_period, Grade_AOI")
@@ -5083,16 +5191,16 @@ void DataLoaderThread::run()
 
     QString combinedQueryStr = QString(R"(
         SELECT 'aoi' as query_type, Type as defect_type, COUNT(*) as cnt, 0 as platform_id, 0 as pass_cnt, 0 as fail_cnt
-        FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_aoidefect
         WHERE %1
         GROUP BY Type
         UNION ALL
         SELECT 'insp_total', '', COUNT(*), 0, SUM(IF(AOIResult = 'OK', 1, 0)), SUM(IF(AOIResult != 'OK', 1, 0))
-        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_inspectionresult
         WHERE %1
         UNION ALL
         SELECT 'insp_platform', '', PlatformID, PlatformID, SUM(IF(AOIResult = 'OK', 1, 0)), SUM(IF(AOIResult != 'OK', 1, 0))
-        FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+        FROM ivs_lcd_inspectionresult
         WHERE %1
         GROUP BY PlatformID
     )").arg(queryCondition);
@@ -5103,6 +5211,12 @@ void DataLoaderThread::run()
 
     if (!combinedQuery.exec(combinedQueryStr)) {
         qDebug() << "Combined query failed:" << combinedQuery.lastError().text();
+        combinedQuery = QSqlQuery();
+        gradeQuery = QSqlQuery();
+        platformAoiResultQ = QSqlQuery();
+        inspectionTrendQ = QSqlQuery();
+        defectTrendQ = QSqlQuery();
+        platformTrendQ = QSqlQuery();
         db.close();
         QSqlDatabase::removeDatabase("worker_connection");
         emit finished(m_loadId);
@@ -5148,6 +5262,12 @@ void DataLoaderThread::run()
     emit inspectionDataLoaded(passByPeriod, failByPeriod, totalInspect, passCount, failCount, passRate);
     emit platformDataLoaded(platformStats);
 
+    combinedQuery = QSqlQuery();
+    gradeQuery = QSqlQuery();
+    platformAoiResultQ = QSqlQuery();
+    inspectionTrendQ = QSqlQuery();
+    defectTrendQ = QSqlQuery();
+    platformTrendQ = QSqlQuery();
     db.close();
     QSqlDatabase::removeDatabase("worker_connection");
 
@@ -5318,7 +5438,7 @@ void TabDataLoaderThread::run()
     if (m_tabIndex == 3) {
         QString queryStr = QString(R"(
             SELECT Pos_x, Pos_y, Type
-            FROM ivs_lcd_aoidefect FORCE INDEX (IDX_StartTime)
+            FROM ivs_lcd_aoidefect
             WHERE %1
             ORDER BY StartTime DESC
         )").arg(m_dateRange);
@@ -5356,7 +5476,7 @@ void TabDataLoaderThread::run()
                 %1 as time_period,
                 Grade_AOI,
                 COUNT(*) as cnt
-            FROM ivs_lcd_inspectionresult FORCE INDEX (IDX_StartTime)
+            FROM ivs_lcd_inspectionresult
             WHERE %2
             GROUP BY time_period, Grade_AOI
             ORDER BY time_period, Grade_AOI
@@ -5464,11 +5584,12 @@ void TabDataLoaderThread::run()
                 COUNT(*) as abnormal_count
             FROM ivs_lcd_inspectionresult
             WHERE %2
-              AND Status LIKE '%%定位异常%%'
+              AND Status LIKE CONVERT(0x%3 USING utf8)
               AND MarkID >= 1 AND MarkID <= 16
             GROUP BY time_period, MarkID
             ORDER BY time_period, MarkID
-        )").arg(timeFormat).arg(m_dateRange);
+        )").arg(timeFormat).arg(m_dateRange).arg(QString::fromLatin1(QStringLiteral("%%定位异常%%").toUtf8().toHex()));
+        qDebug().noquote() << "Location abnormal async query template:" << queryStr;
 
         QSqlQuery query(db);
         query.setForwardOnly(true);
@@ -5487,9 +5608,12 @@ void TabDataLoaderThread::run()
         } else {
             qDebug() << "Location abnormal query failed:" << query.lastError().text();
         }
+        query.finish();
+        query.clear();
     }
 
     db.close();
+    db = QSqlDatabase();
     QSqlDatabase::removeDatabase(connectionName);
 
     qDebug() << "Tab worker thread finished" << m_tabIndex;
@@ -5534,11 +5658,12 @@ void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
             COUNT(*) as abnormal_count
         FROM ivs_lcd_inspectionresult
         WHERE %2
-          AND Status LIKE '%%定位异常%%'
+          AND Status LIKE CONVERT(0x%3 USING utf8mb4)
           AND MarkID >= 1 AND MarkID <= 16
         GROUP BY time_period, MarkID
         ORDER BY time_period, MarkID
-    )").arg(timeFormat).arg(dateRange);
+    )").arg(timeFormat).arg(dateRange).arg(QString::fromLatin1(QStringLiteral("%%定位异常%%").toUtf8().toHex()));
+    qDebug().noquote() << "Location abnormal query template:" << queryStr;
 
     QSqlQuery query(db);
     query.setForwardOnly(true);
@@ -5557,8 +5682,11 @@ void Defect_Data_Display::loadLocationAbnormalData(const QString& timeRange)
     } else {
         qDebug() << "Location abnormal query failed:" << query.lastError().text();
     }
+    query.finish();
+    query.clear();
 
     db.close();
+    db = QSqlDatabase();
     QSqlDatabase::removeDatabase(connectionName);
 }
 
