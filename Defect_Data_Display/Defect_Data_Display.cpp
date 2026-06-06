@@ -412,7 +412,8 @@ bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)
                                         int platformIdx = barIndex % qMax(numBarSets, 1);
                                         if (categoryIndex >= 0 && categoryIndex < categories.size() && platformIdx >= 0 && platformIdx < 4) {
                                             QString timeKey = categories[categoryIndex];
-                                            showBarClickDialog(platformIdx, timeKey);
+                                            Q_UNUSED(platformIdx);
+                                            showBarClickDialog(-1, timeKey);
                                             return true;
                                         }
                                     }
@@ -1066,14 +1067,14 @@ void Defect_Data_Display::showByTimeChartTooltip(const QPoint& viewportPos, cons
                             QStringList parts = aoiBreakdown[i].split("::");
                             if (parts.size() >= 2) {
                                 int existingCount = parts[1].toInt();
-                                aoiBreakdown[i] = "Fail::" + QString::number(existingCount + passFail.second);
+                                aoiBreakdown[i] = "NG::" + QString::number(existingCount + passFail.second);
                             }
                             found = true;
                             break;
                         }
                     }
                     if (!found) {
-                        aoiBreakdown.append("Fail::" + QString::number(passFail.second));
+                        aoiBreakdown.append("NG::" + QString::number(passFail.second));
                     }
                     grandTotal += passFail.second;
                 }
@@ -1932,6 +1933,7 @@ void Defect_Data_Display::onRefreshClicked()
     m_trendDataY2.clear();
     m_trendCache = CachedTabData();
     m_detailCache = CachedTabData();
+    clearPlatformStatsView();
     clearDetailView();
 
     // Disable refresh button and time controls while loading
@@ -2090,6 +2092,45 @@ void Defect_Data_Display::clearDetailView()
     m_chartViewDetail = nullptr;
 }
 
+void Defect_Data_Display::clearPlatformStatsView()
+{
+    m_platformTrendData.clear();
+    m_platformAoiResultData.clear();
+    m_platformGradeTrendData.clear();
+    m_aoiResultCategories.clear();
+    m_byTimeCategoryMap.clear();
+    m_byTimePlatformTotals.clear();
+
+    auto clearPlatformChart = [](QChartView* chartView) {
+        if (!chartView || !chartView->chart()) return;
+        QChart* chart = chartView->chart();
+        if (chart->scene()) {
+            const QList<QGraphicsItem*> items = chart->scene()->items();
+            for (QGraphicsItem* item : items) {
+                if (qgraphicsitem_cast<QGraphicsSimpleTextItem*>(item)) {
+                    chart->scene()->removeItem(item);
+                    delete item;
+                }
+            }
+        }
+        chart->removeAllSeries();
+        for (QAbstractAxis* axis : chart->axes()) {
+            chart->removeAxis(axis);
+            axis->deleteLater();
+        }
+    };
+
+    QChartView* platformCharts[] = {m_chartViewPlatform0, m_chartViewPlatform1, m_chartViewPlatform2, m_chartViewPlatform3};
+    for (QChartView* chartView : platformCharts) {
+        clearPlatformChart(chartView);
+    }
+    clearPlatformChart(m_chartViewPlatformByTime);
+
+    if (m_tooltipLabel) {
+        m_tooltipLabel->hide();
+    }
+}
+
 void Defect_Data_Display::onTimeRangeChanged(int index)
 {
     Q_UNUSED(index);
@@ -2159,6 +2200,10 @@ void Defect_Data_Display::onDataLoaded_Inspection(const QMap<QString, int>& pass
 void Defect_Data_Display::onDataLoaded_Platform(const QMap<int, QPair<int, int>>& platformStats)
 {
     qDebug() << "=== onDataLoaded_Platform called ===" << "platforms:" << platformStats.size();
+    if (platformStats.isEmpty()) {
+        clearPlatformStatsView();
+        return;
+    }
     // Only store data, don't update chart (chart updated by trend data)
     Q_UNUSED(platformStats);
 }
@@ -3864,6 +3909,7 @@ void Defect_Data_Display::updatePlatformTrendChart(const QMap<QString, QMap<int,
 
     if (platformTrendData.isEmpty()) {
         qDebug() << "No platform trend data";
+        clearPlatformStatsView();
         return;
     }
 
@@ -4298,6 +4344,8 @@ void Defect_Data_Display::updatePlatformByTimeChart()
                  << aoiResultCategories.size() << "AOI result types (Pass/Fail) from m_platformTrendData";
     } else {
         qDebug() << "[DATA BUILD] WARNING: BOTH m_platformAoiResultData AND m_platformTrendData are EMPTY!";
+        clearPlatformStatsView();
+        return;
     }
 
     if (timeCategories.isEmpty()) {
@@ -5878,8 +5926,8 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
 
     // Table widget
     QTableWidget* tableWidget = new QTableWidget(m_barClickDialog);
-    tableWidget->setColumnCount(6);
-    tableWidget->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
+    tableWidget->setColumnCount(7);
+    tableWidget->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "MarkID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
     tableWidget->setAlternatingRowColors(true);
     tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -6027,7 +6075,9 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
         int nextHour = (hour + 1) % 24;
         timeRangeText = QString("%1:00到%2:00").arg(hour, 2, 10, QChar('0')).arg(nextHour, 2, 10, QChar('0'));
     }
-    m_barClickDialog->setWindowTitle(QString("工位%1 %2 缺陷记录").arg(platformIdx + 1).arg(timeRangeText));
+    m_barClickDialog->setWindowTitle(platformIdx >= 0
+        ? QString("工位%1 %2 缺陷记录").arg(platformIdx + 1).arg(timeRangeText)
+        : QString("全部工位 %1 缺陷记录").arg(timeRangeText));
 
     // Lambda to load page data
     auto loadPageData = [&](int page) {
@@ -6063,8 +6113,8 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
             // We use BETWEEN to get exact time range: 05:00:00 to 05:59:59
             QString startTime = fullTimeKey;
             // Calculate end time (next hour)
-            QDateTime start = QDateTime::fromString(startTime, "yyyy-MM-dd hh:mm");
-            QString endTime = start.addSecs(3600).toString("yyyy-MM-dd hh:mm");
+            QDateTime start = QDateTime::fromString(startTime, "yyyy-MM-dd HH:mm");
+            QString endTime = start.addSecs(3600).toString("yyyy-MM-dd HH:mm");
             timeFilter = QString("StartTime >= '%1' AND StartTime < '%2'").arg(startTime).arg(endTime);
         } else if (timeRange == "按天") {
             // Filter for entire day
@@ -6085,11 +6135,19 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
         // Use non-prepared statement to avoid ODBC issues
         // Only show non-OK records (defects)
         // Note: The table is ivs_lcd_inspectionresult, PlatformID is 0-based (0,1,2,3)
-        QString sql = QString("SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE PlatformID = %1 AND AOIResult != 'OK' AND %2 ORDER BY StartTime DESC LIMIT %3 OFFSET %4")
-            .arg(platformIdx)
-            .arg(timeFilter)
-            .arg(pageSize)
-            .arg(offset);
+        QString sql;
+        if (platformIdx >= 0) {
+            sql = QString("SELECT StartTime, ScreenID, MarkID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE PlatformID = %1 AND AOIResult != 'OK' AND %2 ORDER BY StartTime DESC LIMIT %3 OFFSET %4")
+                .arg(platformIdx)
+                .arg(timeFilter)
+                .arg(pageSize)
+                .arg(offset);
+        } else {
+            sql = QString("SELECT StartTime, ScreenID, MarkID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID FROM ivs_lcd_inspectionresult WHERE AOIResult != 'OK' AND %1 ORDER BY StartTime DESC LIMIT %2 OFFSET %3")
+                .arg(timeFilter)
+                .arg(pageSize)
+                .arg(offset);
+        }
 
         QSqlQuery query(db);
         if (!query.exec(sql)) {
@@ -6104,7 +6162,7 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
         int row = 0;
         while (query.next()) {
             tableWidget->insertRow(row);
-            for (int col = 0; col < 6; ++col) {
+            for (int col = 0; col < 7; ++col) {
                 QTableWidgetItem* item = new QTableWidgetItem(query.value(col).toString());
                 item->setTextAlignment(Qt::AlignCenter);
                 tableWidget->setItem(row, col, item);
@@ -6112,8 +6170,8 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
 
             tableWidget->setRowHeight(row, 24);
             tableWidget->item(row, 0)->setData(Qt::UserRole, query.value(1).toString());
-            tableWidget->item(row, 0)->setData(Qt::UserRole + 1, query.value(6).toString());
-            tableWidget->item(row, 0)->setData(Qt::UserRole + 2, query.value(7).toInt());
+            tableWidget->item(row, 0)->setData(Qt::UserRole + 1, query.value(7).toString());
+            tableWidget->item(row, 0)->setData(Qt::UserRole + 2, query.value(8).toInt());
             tableWidget->item(row, 0)->setData(Qt::UserRole + 3, query.value(0).toDateTime());
             ++row;
         }
@@ -6133,8 +6191,8 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
     QString countTimeFilter;
     if (timeRange == "按小时") {
         QString startTime = fullTimeKey;
-        QDateTime start = QDateTime::fromString(startTime, "yyyy-MM-dd hh:mm");
-        QString endTime = start.addSecs(3600).toString("yyyy-MM-dd hh:mm");
+        QDateTime start = QDateTime::fromString(startTime, "yyyy-MM-dd HH:mm");
+        QString endTime = start.addSecs(3600).toString("yyyy-MM-dd HH:mm");
         countTimeFilter = QString("StartTime >= '%1' AND StartTime < '%2'").arg(startTime).arg(endTime);
     } else if (timeRange == "按天") {
         countTimeFilter = QString("StartTime >= '%1 00:00:00' AND StartTime < '%2 00:00:00'")
@@ -6173,8 +6231,14 @@ void Defect_Data_Display::showBarClickDialog(int platformIdx, const QString& tim
         // Use non-prepared statement
         // Only count non-OK records (defects)
         // Note: The table is ivs_lcd_inspectionresult, PlatformID is 0-based (0,1,2,3)
-        QString sql = QString("SELECT COUNT(*) FROM ivs_lcd_inspectionresult WHERE PlatformID = %1 AND AOIResult != 'OK' AND %2")
-            .arg(platformIdx).arg(countTimeFilter);
+        QString sql;
+        if (platformIdx >= 0) {
+            sql = QString("SELECT COUNT(*) FROM ivs_lcd_inspectionresult WHERE PlatformID = %1 AND AOIResult != 'OK' AND %2")
+                .arg(platformIdx).arg(countTimeFilter);
+        } else {
+            sql = QString("SELECT COUNT(*) FROM ivs_lcd_inspectionresult WHERE AOIResult != 'OK' AND %1")
+                .arg(countTimeFilter);
+        }
         qDebug() << "[BarClickDialog] Count SQL:" << sql;
         QSqlQuery countQuery(countDb);
         countQuery.exec(sql);
@@ -6583,12 +6647,12 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
 
                         // Load ALL data into memory at once
                         struct FRowData {
-                            QString startTime, screenId, aoiResult, gradeAOI, codeAOI, status, localIP;
+                            QString startTime, screenId, MarkID, aoiResult, gradeAOI, codeAOI, status, localIP;
                             int platformId;
                         };
                         QList<FRowData> fAllRows;
                         QString fLoadAllStr = QString(
-                            "SELECT StartTime, ScreenID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID "
+                            "SELECT StartTime, ScreenID, MarkID, AOIResult, Grade_AOI, Code_AOI, Status, LocalIP, PlatformID "
                             "FROM ivs_lcd_inspectionresult WHERE Grade_AOI = '%1' AND Code_AOI = '%2' %3 "
                             "ORDER BY StartTime DESC"
                         ).arg(gradeName).arg(clickedCodeAOI).arg(fTimeFilter);
@@ -6598,12 +6662,13 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
                                 FRowData row;
                                 row.startTime = fLoadAllQuery.value(0).toString();
                                 row.screenId = fLoadAllQuery.value(1).toString();
-                                row.aoiResult = fLoadAllQuery.value(2).toString();
-                                row.gradeAOI = fLoadAllQuery.value(3).toString();
-                                row.codeAOI = fLoadAllQuery.value(4).toString();
-                                row.status = fLoadAllQuery.value(5).toString();
-                                row.localIP = fLoadAllQuery.value(6).toString();
-                                row.platformId = fLoadAllQuery.value(7).toInt();
+                                row.MarkID = fLoadAllQuery.value(2).toString();
+                                row.aoiResult = fLoadAllQuery.value(3).toString();
+                                row.gradeAOI = fLoadAllQuery.value(4).toString();
+                                row.codeAOI = fLoadAllQuery.value(5).toString();
+                                row.status = fLoadAllQuery.value(6).toString();
+                                row.localIP = fLoadAllQuery.value(7).toString();
+                                row.platformId = fLoadAllQuery.value(8).toInt();
                                 fAllRows.append(row);
                             }
                         }
@@ -6622,8 +6687,8 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
 
                         // Table widget
                         QTableWidget* fTable = new QTableWidget(&filterDialog);
-                        fTable->setColumnCount(6);
-                        fTable->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
+                        fTable->setColumnCount(7);
+                        fTable->setHorizontalHeaderLabels(QStringList() << "StartTime" << "ScreenID" << "MarkID" << "AOIResult" << "Grade_AOI" << "Code_AOI" << "Status");
                         fTable->setAlternatingRowColors(true);
                         fTable->setSelectionBehavior(QAbstractItemView::SelectRows);
                         fTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -6717,17 +6782,18 @@ void Defect_Data_Display::showGradeTypeDialog(const QString& gradeName)
                                 fTable->insertRow(fRow);
                                 fTable->setItem(fRow, 0, new QTableWidgetItem(rowData.startTime));
                                 fTable->setItem(fRow, 1, new QTableWidgetItem(rowData.screenId));
-                                fTable->setItem(fRow, 2, new QTableWidgetItem(rowData.aoiResult));
-                                fTable->setItem(fRow, 3, new QTableWidgetItem(rowData.gradeAOI));
-                                fTable->setItem(fRow, 4, new QTableWidgetItem(rowData.codeAOI));
-                                fTable->setItem(fRow, 5, new QTableWidgetItem(rowData.status));
+                                fTable->setItem(fRow, 2, new QTableWidgetItem(rowData.MarkID));
+                                fTable->setItem(fRow, 3, new QTableWidgetItem(rowData.aoiResult));
+                                fTable->setItem(fRow, 4, new QTableWidgetItem(rowData.gradeAOI));
+                                fTable->setItem(fRow, 5, new QTableWidgetItem(rowData.codeAOI));
+                                fTable->setItem(fRow, 6, new QTableWidgetItem(rowData.status));
 
                                 QTableWidgetItem* fStartItem = fTable->item(fRow, 0);
                                 if (fStartItem) {
                                     fStartItem->setData(Qt::UserRole, rowData.screenId);
                                     fStartItem->setData(Qt::UserRole + 1, rowData.localIP);
                                     fStartItem->setData(Qt::UserRole + 2, rowData.platformId);
-                                    fStartItem->setData(Qt::UserRole + 3, QDateTime::fromString(rowData.startTime, "yyyy-MM-dd hh:mm:ss"));
+                                    fStartItem->setData(Qt::UserRole + 3, QDateTime::fromString(rowData.startTime, "yyyy-MM-dd HH:mm:ss"));
                                 }
                             }
                             fPageLabel->setText(QString("共 %1 条记录，第 %2/%3 页").arg(fTotalCount).arg(page).arg(fTotalPages));
