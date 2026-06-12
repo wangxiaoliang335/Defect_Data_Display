@@ -3675,22 +3675,24 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
         return a < b;
     });
 
+    QMap<QString, QColor> displayGradeColors;
+    int colorIdx = 0;
+    for (const QString& gradeAOI : sortedGrades) {
+        if (gradeColors.contains(gradeAOI)) {
+            displayGradeColors[gradeAOI] = gradeColors[gradeAOI];
+        } else {
+            displayGradeColors[gradeAOI] = otherColors[colorIdx % otherColors.size()];
+            colorIdx++;
+        }
+    }
+
     QPieSeries* pieSeries = new QPieSeries();
     pieSeries->setLabelsVisible(true);
 
-    int colorIdx = 0;
-    for (auto it = gradeCount.constBegin(); it != gradeCount.constEnd(); ++it) {
-        QString gradeAOI = it.key();
-        int count = it.value();
+    for (const QString& gradeAOI : sortedGrades) {
+        int count = gradeCount.value(gradeAOI);
         QPieSlice* slice = pieSeries->append(gradeAOI, count);
-
-        // Use predefined color if available, otherwise cycle through other colors
-        if (gradeColors.contains(gradeAOI)) {
-            slice->setColor(gradeColors[gradeAOI]);
-        } else {
-            slice->setColor(otherColors[colorIdx % otherColors.size()]);
-            colorIdx++;
-        }
+        slice->setColor(displayGradeColors.value(gradeAOI));
         slice->setLabelBrush(QBrush(QColor(234, 234, 234)));
         slice->setLabelFont(QFont("Arial", 10, QFont::Bold));
     }
@@ -3873,7 +3875,7 @@ void Defect_Data_Display::updateDetailTable(const QList<QVariantList>& defectDet
         const QString& grade = sortedGrades[row];
         const int count = gradeCount.value(grade, 0);
         const double ratio = inlineTotal > 0 ? static_cast<double>(count) / static_cast<double>(inlineTotal) : 0.0;
-        QColor color = gradeColors.contains(grade) ? gradeColors[grade] : otherColors[row % otherColors.size()];
+        QColor color = displayGradeColors.value(grade, QColor("#e0e0e0"));
 
         QTableWidgetItem* nameItem = new QTableWidgetItem("● " + grade);
         nameItem->setForeground(QBrush(color));
