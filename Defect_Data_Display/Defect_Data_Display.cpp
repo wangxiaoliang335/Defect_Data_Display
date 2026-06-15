@@ -59,6 +59,7 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_searchStartHour(0)    // 默认 00:00
     , m_searchEndHour(23)     // 默认 23:59
     , m_isDragging(false)
+    , m_fullScreenInitialized(false)
     , m_isLoading(false)
     , m_isTabLoading(false)
     , m_lastMainLoadTime(0)
@@ -67,9 +68,6 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_detailPieTitle()
     , m_detailPieData()
 {
-    setWindowFlags(Qt::FramelessWindowHint);
-    setAttribute(Qt::WA_TranslucentBackground);
-
     ui.setupUi(this);
 
     ui.dateEdit->setDate(m_selectedDate);
@@ -332,6 +330,18 @@ void Defect_Data_Display::mouseReleaseEvent(QMouseEvent* event)
         m_isDragging = false;
     }
     QMainWindow::mouseReleaseEvent(event);
+}
+
+void Defect_Data_Display::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+    if (!m_fullScreenInitialized) {
+        m_fullScreenInitialized = true;
+        QTimer::singleShot(0, this, [this]() {
+            setWindowFlags(Qt::FramelessWindowHint);
+            showFullScreen();
+        });
+    }
 }
 
 bool Defect_Data_Display::eventFilter(QObject* watched, QEvent* event)

@@ -5,7 +5,7 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     Defect_Data_Display window;
-    window.resize(1920, 1080);
     window.show();
+    window.resize(1920, 1080);
     return app.exec();
 }

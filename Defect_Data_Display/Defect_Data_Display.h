@@ -61,6 +61,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void showEvent(QShowEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
     void showPlatformChartTooltip(QChartView* chartView, int platformIdx, const QPoint& viewportPos, const QPointF& chartPos);
     void showByTimeChartTooltip(const QPoint& viewportPos, const QPointF& chartPos);
@@ -127,6 +128,7 @@ private:
 
     QPoint m_dragPosition;
     bool m_isDragging;
+    bool m_fullScreenInitialized;
     bool m_isLoading;
     bool m_isTabLoading;
 
