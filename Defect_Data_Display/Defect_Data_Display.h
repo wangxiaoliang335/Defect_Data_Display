@@ -71,6 +71,7 @@ private slots:
     void onTimeRangeChanged(int index);
     void updateDateTime();
     void onMinimizeClicked();
+    void onMaximizeClicked();
     void onCloseClicked();
     void onTabChanged(int index);
     void onPlatformTabChanged(int index);
@@ -129,6 +130,7 @@ private:
     QPoint m_dragPosition;
     bool m_isDragging;
     bool m_fullScreenInitialized;
+    bool m_isMaximized;
     bool m_isLoading;
     bool m_isTabLoading;
 

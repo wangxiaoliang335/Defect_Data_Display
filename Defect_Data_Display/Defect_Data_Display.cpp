@@ -60,6 +60,7 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
     , m_searchEndHour(23)     // 默认 23:59
     , m_isDragging(false)
     , m_fullScreenInitialized(false)
+    , m_isMaximized(false)
     , m_isLoading(false)
     , m_isTabLoading(false)
     , m_lastMainLoadTime(0)
@@ -124,6 +125,7 @@ Defect_Data_Display::Defect_Data_Display(QWidget *parent)
         }
     });
     connect(ui.btnMinimize, &QPushButton::clicked, this, &Defect_Data_Display::onMinimizeClicked);
+    connect(ui.btnMaximize, &QPushButton::clicked, this, &Defect_Data_Display::onMaximizeClicked);
     connect(ui.btnClose, &QPushButton::clicked, this, &Defect_Data_Display::onCloseClicked);
     connect(ui.tabWidget, &QTabWidget::currentChanged, this, &Defect_Data_Display::onTabChanged);
     connect(ui.tabPlatformPages, &QTabWidget::currentChanged, this, &Defect_Data_Display::onPlatformTabChanged);
@@ -1147,6 +1149,19 @@ void Defect_Data_Display::showByTimeChartTooltip(const QPoint& viewportPos, cons
 void Defect_Data_Display::onMinimizeClicked()
 {
     showMinimized();
+}
+
+void Defect_Data_Display::onMaximizeClicked()
+{
+    if (m_isMaximized) {
+        showNormal();
+        m_isMaximized = false;
+        ui.btnMaximize->setText(QStringLiteral("\u25A1")); // □
+    } else {
+        showMaximized();
+        m_isMaximized = true;
+        ui.btnMaximize->setText(QStringLiteral("\u2750")); // ❐
+    }
 }
 
 void Defect_Data_Display::onCloseClicked()
